@@ -1,4 +1,4 @@
-# Enphase Monitor iOS App
+# My Enphase iOS App
 
 An iOS application for monitoring energy metrics from multiple Enphase solar systems via the Enphase Enlighten Cloud API v4. This app provides the same functionality as the Go terminal application but with a native iOS interface.
 
@@ -100,119 +100,101 @@ To get your refresh token:
 **Combined Energy Report:**
 - **Produced**: Total solar generation (kWh)
 - **Consumed**: Total household consumption (kWh)
-- **Net Energy Flow**: Net import/export (positive = import, negative = export)
+# My Enphase (iOS)
 
-**Individual System Metrics:**
-- **Imported from the Grid**: Energy purchased from utility (kWh)
-- **Exported to the Grid**: Energy sold to utility (kWh)
-- **Captured from the Sun**: Solar generation (kWh)
-- **Net Energy Flow**: Net import/export for this system
-- **Charged to Battery**: Energy stored in batteries (kWh)
-- **Discharged from Battery**: Energy used from batteries (kWh)
-- **Battery Charge Percentage**: Current battery state of charge (day queries only)
-- **Total Consumed**: Total consumption for this system (kWh)
+An iOS app to monitor energy metrics from one or more Enphase systems using the Enphase Enlighten Cloud API v4. The app is implemented in SwiftUI and is intended as a personal utility for viewing combined and per-system energy metrics.
 
-## Architecture
+## Highlights
 
-The iOS app follows clean architecture principles with separation of concerns:
+- Multi-system monitoring with combined and per-system reports
+- Day / Month / Year historical queries
+- OAuth 2.0 token refresh (refresh token required)
+- SwiftUI-based UI (iPhone / iPad)
+- Manual refresh to respect API rate limits
 
-### Models
-- **EnphaseModels.swift**: Core data structures
-  - `SystemMetrics`: Per-system energy metrics
-  - `AggregatedMetrics`: Combined metrics from all systems
-  - `AppConfig`: Application configuration
-  - `APIConfig`: API credentials
+## Prerequisites
 
-### Services
-- **EnphaseAPIClient.swift**: HTTP client for Enphase Cloud API v4
-  - OAuth token management with automatic refresh
-  - API endpoint wrappers
-  - Error handling and rate limit detection
-  
-- **DataAggregator.swift**: Multi-system data orchestration
-  - Fetches data from all configured systems
-  - Aggregates metrics into combined totals
-  - Manages loading and error states
+- macOS with Xcode 15 (or latest compatible Xcode)
+- iOS 16 or later to run the app on device/simulator
+- Enphase Developer Portal account: https://developer-v4.enphase.com/
+- OAuth credentials (API key, client ID, client secret) and a refresh token
 
-- **ConfigManager.swift**: Configuration persistence
-  - UserDefaults-based storage
-  - API credential management
-  - System configuration
+## Open & Run
 
-### Views
-- **DashboardView.swift**: Main screen coordinator
-- **SettingsView.swift**: Configuration interface
-- **Components/**:
-  - `HeaderView.swift`: Query information display
-  - `CombinedReportView.swift`: Aggregated metrics
-  - `IndividualSystemsView.swift`: Per-system details
+1. Open the Xcode project at:
 
-## API Rate Limits
+   open "My Enphase.xcodeproj"
 
-The Enphase Cloud API v4 has the following limits:
-- **10 requests per minute** per API key
-- **1000 requests per month** (free developer plan)
+2. Choose your development team under Signing & Capabilities.
+3. Build and run on a simulator or device.
 
-The app respects these limits by:
-- Manual refresh (no automatic background polling)
-- Cached OAuth tokens (reduces token refresh calls)
-- Clear error messages on rate limit (429 status)
+## Configuration (In-App)
 
-**Best Practice**: Query data sparingly, especially when monitoring multiple systems. Each refresh makes 3+ API calls per system.
+1. Launch the app and open `Settings`.
+2. Enter API credentials:
+   - API Key
+   - Client ID
+   - Client Secret
+   - Refresh Token (required for in-app requests)
+3. Add one or more systems via `Add System` (enter System ID and a friendly name).
+4. Save configuration.
 
-## Comparison with Go Application
+Note: The app currently expects a pre-obtained refresh token. An in-app OAuth authorization flow is planned.
 
-| Feature | Go App | iOS App |
-|---------|--------|---------|
-| Multi-system monitoring | ✅ | ✅ |
-| Historical queries (day/month/year) | ✅ | ✅ |
-| OAuth 2.0 authentication | ✅ | ✅ (token management) |
-| Automatic refresh | ✅ | ❌ (manual refresh) |
-| Response caching | ✅ (disk-based) | ❌ (planned) |
-| Test/validation mode | ✅ | ❌ |
-| Color customization | ✅ (config file) | ✅ (hardcoded) |
-| OAuth setup wizard | ✅ | ❌ (planned) |
+### Finding Your System ID
+
+1. Log into https://enlighten.enphaseenergy.com
+2. Select a system and inspect the URL such as:
+
+   https://enlighten.enphaseenergy.com/systems/SYSTEM_ID/overview
+
+3. The numeric `SYSTEM_ID` is what you enter in the app.
+
+## Project Structure
+
+- Models: [My Enphase/Models/EnphaseModels.swift](My%20Enphase/Models/EnphaseModels.swift)
+  - `SystemMetrics`, `AggregatedMetrics`, `APIConfig`, `AppConfig`
+
+- Services:
+  - [My Enphase/Services/EnphaseAPIClient.swift](My%20Enphase/Services/EnphaseAPIClient.swift) — API client with OAuth refresh, telemetry endpoints, rate-limit handling, and helper calculations
+  - [My Enphase/Services/DataAggregator.swift](My%20Enphase/Services/DataAggregator.swift) — Orchestrates multi-system requests and aggregates metrics
+  - [My Enphase/Services/ConfigManager.swift](My%20Enphase/Services/ConfigManager.swift) — Persists `AppConfig` to `UserDefaults` and provides helpers to add/remove systems
+
+- Views: [My Enphase/Views](My%20Enphase/Views)
+  - `DashboardView.swift` — Main UI and coordinator
+  - `SettingsView.swift` — Configure API credentials and systems
+  - `Components/` — `HeaderView`, `CombinedReportView`, `IndividualSystemsView`
+
+## Implementation Notes (from code)
+
+- OAuth: `EnphaseAPIClient.refreshAccessToken(using:)` performs a token refresh using the configured `authorizationURL` and caches the `access_token` until expiry.
+- API key: The client appends the API key as a URL parameter to each request (per the current implementation).
+- Endpoints: Production, consumption, battery, import/export telemetry endpoints are called individually for each system; each refresh can produce multiple API calls per system.
+- Rate limits: The client maps HTTP 429 to a `rateLimitExceeded` error; the UI uses manual refresh to avoid uncontrolled polling.
+- Persistence: `ConfigManager` stores `AppConfig` in `UserDefaults` under the `enphase_app_config` key.
+
+## Usage
+
+- Tap the refresh control to fetch current data (DataAggregator will call the API for each configured system).
+- Use the calendar control to switch between Day / Month / Year queries.
 
 ## Troubleshooting
 
-### "Authentication Required"
-- Verify your API credentials in Settings
-- Ensure your refresh token is valid
-- Re-run OAuth setup using the Go app if needed
+- "Authentication Required": verify `API Key`, `Client ID`, `Client Secret`, and `Refresh Token` in `Settings`.
+- "Rate Limit Exceeded": wait ~60 seconds and try again; limit API calls when multiple systems are configured.
+- No data: ensure your systems are reporting to Enlighten and system IDs are correct.
 
-### "Rate Limit Exceeded"
-- The API allows 10 calls per minute
-- Wait 60 seconds before retrying
-- Consider querying less frequently
+## Future Work
 
-### "Invalid Response" or Network Errors
-- Check your internet connection
-- Verify system IDs are correct
-- Ensure API credentials are properly configured
-
-### No Data Displayed
-- Tap the refresh button to load data
-- Check that your systems are reporting to Enlighten
-- Try querying a recent historical date
-
-## Future Enhancements
-
-Planned features:
-- [ ] In-app OAuth authorization flow
-- [ ] Response caching for offline viewing
-- [ ] Automatic background refresh with notifications
-- [ ] Charts and graphs for historical trends
-- [ ] Widget support for home screen
-- [ ] Apple Watch companion app
-- [ ] Export data to CSV
-- [ ] Dark mode color customization
+- In-app OAuth flow (obtain refresh token inside the app)
+- Response caching for offline viewing
+- Background refresh with notifications
+- Charts for historical trends, widget and Watch support
 
 ## Related Projects
 
-This iOS app is based on the Go terminal application:
-- **Go Application**: `/Users/jimmy.huang/workspace/enphase-monitor`
-- **Documentation**: See Go app's README.md for comprehensive API documentation
+If you use a companion CLI or helper (external) tool to obtain OAuth refresh tokens, keep its instructions with that project. This repository does not include the OAuth CLI.
 
 ## License
 
-This is a personal utility project. Use and modify as needed for your own Enphase monitoring needs.
+Personal utility project — modify for your own use.
