@@ -9,6 +9,13 @@ import SwiftUI
 
 @main
 struct Enphase_Monitor_AppApp: App {
+    init() {
+        // Set black background for launch screen
+        if let window = UIApplication.shared.windows.first {
+            window.backgroundColor = .black
+        }
+    }
+    
     var body: some Scene {
         WindowGroup {
             ContentView()
