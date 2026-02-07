@@ -119,7 +119,7 @@ struct DashboardView: View {
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     Text("ENPHASE MULTI-SYSTEM MONITOR")
-                        .font(.system(size: 19, weight: .bold, design: .monospaced))
+                        .font(.system(size: 18, weight: .bold, design: .monospaced))
                         .foregroundColor(.orange)
                 }
                 
