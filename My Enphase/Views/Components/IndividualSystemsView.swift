@@ -34,7 +34,7 @@ struct IndividualSystemsView: View {
                     system: system,
                     showBatterySOC: queryType == .day
                 )
-                .padding(.vertical, 2)
+                .padding(.vertical, 1)
             }
         }
         .padding(.top, 4)
@@ -141,7 +141,7 @@ struct SystemCardView: View {
             }
         }
         .padding(.horizontal, 14)
-        .padding(.vertical)
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.black)
     }

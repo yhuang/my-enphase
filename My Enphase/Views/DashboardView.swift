@@ -77,6 +77,9 @@ struct DashboardView: View {
                             
                             CombinedReportView(metrics: metrics)
                             
+                            Spacer()
+                                .frame(height: 24)
+                            
                             if metrics.systems.count > 1 {
                                 IndividualSystemsView(systems: metrics.systems, queryType: .day)
                             }
