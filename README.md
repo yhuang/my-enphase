@@ -65,21 +65,6 @@ The app displays:
 3. Look at the URL: `https://enlighten.enphaseenergy.com/systems/SYSTEM_ID/overview`
 4. The number in the URL is your System ID
 
-### OAuth Setup
-
-To get your refresh token:
-
-1. Use the Go application's OAuth setup:
-   ```bash
-   cd /path/to/enphase-monitor
-   ./enphase-monitor --setup-oauth
-   ```
-
-2. Follow the interactive wizard to authorize and get your refresh token
-3. Copy the refresh token to the iOS app settings
-
-**Note**: The iOS app currently requires a pre-configured refresh token. A future version will include in-app OAuth flow.
-
 ## Usage
 
 ### Viewing Current Data
@@ -163,22 +148,22 @@ An iOS app to monitor energy metrics from one or more Enphase systems using the 
 - **Orange separators** frame the stats section
 
 ### Combined Energy Report
-- **Produced**: Total solar generation with sun icon (☀️)
+- **Produced**: Total solar generation with sun icon (sun.max.fill)
 - **Consumed**: Total household consumption
 - **Net Flow**: Grid import/export with directional arrows
-  - Pink ⬇️ for import (buying from grid)
-  - Cyan ⬆️ for export (selling to grid)
+  - magenta-colored down arrow for import (buying from grid)
+  - cyan-colored up arrow for export (selling to grid)
 
 ### Individual Systems Report
 For each system:
-- **Grid Import**: Pink with down arrow icon
-- **Grid Export**: Cyan with up arrow icon
-- **Produced**: Yellow with sun.max.fill icon (☀️)
-- **Net Grid Flow**: Shows import/export with arrows
-- **Charged**: Green (#7acf38) with battery.100percent.bolt icon (🔋⚡)
-- **Discharged**: Green (#7acf38) with battery.0percent icon (🔋)
-- **Percent**: Battery state of charge (SOC) percentage
-- **Total Consumed**: Orange
+- **Grid Import**: Energy purchased from utility for this system (kWh)
+- **Grid Export**: Energy sold back to utility from this system (kWh)
+- **Produced**: Solar generation for this system (kWh)
+- **Net Energy Flow**: Net import/export for this system (kWh) with (import) or (export) suffix
+- **Battery Charged**: Energy stored in batteries for this system (kWh)
+- **Battery Discharged**: Energy used from batteries for this system (kWh)
+- **Battery Percentage**: Current state of charge (SOC) of the battery system, displayed as a percentage (0-100%). This metric is shown per-system only and is not aggregated across multiple systems.
+- **Total Consumed**: Total consumption for this system (kWh)
 
 ## Features
 
@@ -197,12 +182,6 @@ For each system:
 ### Visual Design
 - **Monospaced fonts**: 16pt for content, 19pt for title
 - **Icon integration**: SF Symbols sized at 15pt for perfect alignment
-- **Color coding**:
-  - Orange: Headings, consumed energy, navigation title
-  - Yellow: Solar production
-  - Pink: Grid import
-  - Cyan: Grid export
-  - Green (#7acf38): Battery metrics
 - **16pt left padding**: Content slightly indented for visual breathing room
 
 ## Project Structure
@@ -302,11 +281,9 @@ Production, consumption, battery, import/export telemetry endpoints are called i
 ## Future Work
 
 - **In-app OAuth flow** (obtain refresh token inside app)
-- **Historical queries** (day/month/year)
 - **Charts** for trend visualization
 - **Background refresh** with notifications
 - **Widgets** and Apple Watch support
-- **Export data** to CSV
 
 ## Related Projects
 
