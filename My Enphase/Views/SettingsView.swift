@@ -83,13 +83,15 @@ struct SettingsView: View {
                 .headerProminence(.increased)
                 
                 Section {
-                    Button("Save Configuration") {
-                        saveConfiguration()
+                    Button("Clear Cache") {
+                        // Note: This is handled at DataAggregator level now
+                        // Individual API cache is only used as fallback
+                        APICache.shared.clearCache()
                     }
-                    .disabled(!isValid())
                     
                     Button("Clear All Data", role: .destructive) {
                         configManager.clearConfig()
+                        APICache.shared.clearCache()
                         loadCurrentConfig()
                     }
                 }

@@ -44,27 +44,21 @@ struct SystemMetrics: Identifiable, Codable {
 // MARK: - Aggregated Metrics
 struct AggregatedMetrics: Codable {
     let timestamp: Date
-    let queryDate: Date
-    let queryType: QueryType
     let productionToday: Double
     let consumptionToday: Double
     let gridImportToday: Double
     let gridExportToday: Double
     let netImportToday: Double
     let systems: [SystemMetrics]
-    let cacheUsed: Bool
     
     enum CodingKeys: String, CodingKey {
         case timestamp
-        case queryDate = "query_date"
-        case queryType = "query_type"
         case productionToday = "production_today"
         case consumptionToday = "consumption_today"
         case gridImportToday = "grid_import_today"
         case gridExportToday = "grid_export_today"
         case netImportToday = "net_import_today"
         case systems
-        case cacheUsed = "cache_used"
     }
 }
 

@@ -16,12 +16,12 @@ struct IndividualSystemsView: View {
             // Section Header
             VStack(spacing: 2) {
                 Text("INDIVIDUAL SYSTEMS REPORT")
-                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                    .font(.system(size: 16, weight: .bold, design: .monospaced))
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 
-                Text(String(repeating: "-", count: 49))
-                    .font(.system(size: 13, design: .monospaced))
+                Text(String(repeating: "-", count: 37))
+                    .font(.system(size: 16, design: .monospaced))
                     .foregroundColor(.gray)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -39,6 +39,7 @@ struct IndividualSystemsView: View {
         }
         .padding(.top, 4)
         .padding(.bottom)
+        .padding(.leading, 16)
         .frame(maxWidth: .infinity)
         .background(Color.black)
     }
@@ -55,28 +56,28 @@ struct SystemCardView: View {
             // System Header
             HStack(spacing: 4) {
                 Text("[\(index)]")
-                    .font(.system(size: 13, design: .monospaced))
+                    .font(.system(size: 16, design: .monospaced))
                     .foregroundColor(.orange)
                 
                 Text(system.name)
-                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                    .font(.system(size: 16, weight: .bold, design: .monospaced))
                     .foregroundColor(.white)
                 
                 Text(" (\(system.id))")
-                    .font(.system(size: 13, design: .monospaced))
+                    .font(.system(size: 16, design: .monospaced))
                     .foregroundColor(.gray)
             }
             
             // Metrics
             VStack(spacing: 3) {
                 SystemMetricRow(
-                    label: "Imported",
+                    label: "Import",
                     value: system.gridImportToday,
                     color: .pink
                 )
                 
                 SystemMetricRow(
-                    label: "Exported",
+                    label: "Export",
                     value: system.gridExportToday,
                     color: .cyan
                 )
@@ -84,39 +85,50 @@ struct SystemCardView: View {
                 SystemMetricRow(
                     label: "Produced",
                     value: system.productionToday,
-                    color: .yellow
+                    color: .yellow,
+                    icon: "sun.max.fill",
+                    iconColor: .yellow
                 )
                 
                 SystemNetFlowRow(
-                    label: "Net Energy Flow",
+                    label: "Net Grid Flow",
                     value: system.netImportedToday
                 )
                 
                 SystemMetricRow(
-                    label: "Battery Charged",
+                    label: "Charged",
                     value: system.batteryChargedToday,
-                    color: .green
+                    color: Color(hex: "7acf38"),
+                    icon: "battery.100percent.bolt",
+                    iconColor: Color(hex: "7acf38")
                 )
                 
                 SystemMetricRow(
-                    label: "Battery Discharged",
+                    label: "Discharged",
                     value: system.batteryDischargedToday,
-                    color: .green
+                    color: Color(hex: "7acf38"),
+                    icon: "battery.0percent",
+                    iconColor: Color(hex: "7acf38")
                 )
                 
                 // Battery SOC (only for day queries)
                 if showBatterySOC {
                     HStack(spacing: 0) {
-                        Text("Battery Percentage:")
-                            .font(.system(size: 13, design: .monospaced))
-                            .foregroundColor(.white)
-                            .frame(width: 163, alignment: .leading)
+                        HStack(spacing: 4) {
+                            Image(systemName: "battery.100percent")
+                                .font(.system(size: 15))
+                                .foregroundColor(Color(hex: "7acf38"))
+                            Text("Percent:")
+                                .font(.system(size: 16, design: .monospaced))
+                                .foregroundColor(.white)
+                        }
+                        .frame(width: 163, alignment: .leading)
                         
                         Text("  ")
                         
                         Text(String(format: "%d%%", system.batterySOC))
-                            .font(.system(size: 13, design: .monospaced))
-                            .foregroundColor(.green)
+                            .font(.system(size: 16, design: .monospaced))
+                            .foregroundColor(Color(hex: "7acf38"))
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
@@ -140,18 +152,27 @@ struct SystemMetricRow: View {
     let label: String
     let value: Double
     let color: Color
+    var icon: String? = nil
+    var iconColor: Color? = nil
     
     var body: some View {
         HStack(spacing: 0) {
-            Text(label + ":")
-                .font(.system(size: 13, design: .monospaced))
-                .foregroundColor(.white)
-                .frame(width: 163, alignment: .leading)
+            HStack(spacing: 4) {
+                if let icon = icon {
+                    Image(systemName: icon)
+                        .font(.system(size: 15))
+                        .foregroundColor(iconColor ?? .white)
+                }
+                Text(label + ":")
+                    .font(.system(size: 16, design: .monospaced))
+                    .foregroundColor(.white)
+            }
+            .frame(width: 163, alignment: .leading)
             
             Text("  ")
             
             Text(String(format: "%.1f kWh", value))
-                .font(.system(size: 13, design: .monospaced))
+                .font(.system(size: 16, design: .monospaced))
                 .foregroundColor(color)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -166,16 +187,22 @@ struct SystemNetFlowRow: View {
     var body: some View {
         HStack(spacing: 0) {
             Text(label + ":")
-                .font(.system(size: 13, design: .monospaced))
+                .font(.system(size: 16, design: .monospaced))
                 .foregroundColor(.white)
                 .frame(width: 163, alignment: .leading)
             
             Text("  ")
             
-            Text(String(format: "%.1f kWh (%@)", abs(value), value >= 0 ? "import" : "export"))
-                .font(.system(size: 13, design: .monospaced))
-                .foregroundColor(value >= 0 ? .pink : .cyan)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 4) {
+                Text(String(format: "%.1f kWh ", abs(value)))
+                    .font(.system(size: 16, design: .monospaced))
+                    .foregroundColor(value >= 0 ? .pink : .cyan)
+                
+                Image(systemName: value >= 0 ? "arrow.down.circle.fill" : "arrow.up.circle.fill")
+                    .font(.system(size: 15))
+                    .foregroundColor(value >= 0 ? .pink : .cyan)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }

@@ -15,12 +15,12 @@ struct CombinedReportView: View {
             // Section Header
             VStack(spacing: 2) {
                 Text("COMBINED ENERGY REPORT")
-                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                    .font(.system(size: 16, weight: .bold, design: .monospaced))
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 
-                Text(String(repeating: "-", count: 49))
-                    .font(.system(size: 13, design: .monospaced))
+                Text(String(repeating: "-", count: 37))
+                    .font(.system(size: 16, design: .monospaced))
                     .foregroundColor(.gray)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -41,13 +41,14 @@ struct CombinedReportView: View {
                 )
                 
                 NetFlowRow(
-                    label: "Net Energy Flow:",
+                    label: "Net Flow:",
                     value: metrics.netImportToday
                 )
             }
             .padding(.horizontal)
         }
         .padding(.vertical)
+        .padding(.leading, 16)
         .frame(maxWidth: .infinity)
         .background(Color.black)
     }
@@ -62,14 +63,14 @@ struct MetricRow: View {
     var body: some View {
         HStack(spacing: 0) {
             Text(label)
-                .font(.system(size: 13, design: .monospaced))
+                .font(.system(size: 16, design: .monospaced))
                 .foregroundColor(.white)
                 .frame(width: 123, alignment: .leading)
             
             Text("  ")
             
             Text(String(format: "%.1f kWh", value))
-                .font(.system(size: 13, design: .monospaced))
+                .font(.system(size: 16, design: .monospaced))
                 .foregroundColor(color)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -84,16 +85,22 @@ struct NetFlowRow: View {
     var body: some View {
         HStack(spacing: 0) {
             Text(label)
-                .font(.system(size: 13, design: .monospaced))
+                .font(.system(size: 16, design: .monospaced))
                 .foregroundColor(.white)
                 .frame(width: 123, alignment: .leading)
             
             Text("  ")
             
-            Text(String(format: "%.1f kWh (%@)", abs(value), value >= 0 ? "import" : "export"))
-                .font(.system(size: 13, design: .monospaced))
-                .foregroundColor(value >= 0 ? .pink : .cyan)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 4) {
+                Text(String(format: "%.1f kWh ", abs(value)))
+                    .font(.system(size: 16, design: .monospaced))
+                    .foregroundColor(value >= 0 ? .pink : .cyan)
+                
+                Image(systemName: value >= 0 ? "arrow.down.circle.fill" : "arrow.up.circle.fill")
+                    .font(.system(size: 15))
+                    .foregroundColor(value >= 0 ? .pink : .cyan)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
@@ -102,15 +109,12 @@ struct NetFlowRow: View {
     CombinedReportView(
         metrics: AggregatedMetrics(
             timestamp: Date(),
-            queryDate: Date(),
-            queryType: .day,
             productionToday: 33.4,
             consumptionToday: 48.6,
             gridImportToday: 30.6,
             gridExportToday: 11.4,
             netImportToday: 19.2,
-            systems: [],
-            cacheUsed: false
+            systems: []
         )
     )
 }

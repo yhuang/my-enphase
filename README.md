@@ -102,15 +102,16 @@ To get your refresh token:
 - **Consumed**: Total household consumption (kWh)
 # My Enphase (iOS)
 
-An iOS app to monitor energy metrics from one or more Enphase systems using the Enphase Enlighten Cloud API v4. The app is implemented in SwiftUI and is intended as a personal utility for viewing combined and per-system energy metrics.
+An iOS app to monitor energy metrics from one or more Enphase systems using the Enphase Enlighten Cloud API v4. Features a clean, icon-enhanced interface with pull-to-refresh support and intelligent caching.
 
 ## Highlights
 
-- Multi-system monitoring with combined and per-system reports
-- Day / Month / Year historical queries
-- OAuth 2.0 token refresh (refresh token required)
-- SwiftUI-based UI (iPhone / iPad)
-- Manual refresh to respect API rate limits
+- **Multi-system monitoring** with combined and per-system reports
+- **Pull-to-refresh** with intelligent 60-second cache to minimize API calls
+- **Icon-enhanced UI** with SF Symbols for battery, solar, and grid status
+- **OAuth 2.0 token refresh** (refresh token required)
+- **SwiftUI-based** responsive design (iPhone / iPad)
+- **Monospaced typography** at 16pt with clear visual hierarchy
 
 ## Prerequisites
 
@@ -121,79 +122,195 @@ An iOS app to monitor energy metrics from one or more Enphase systems using the 
 
 ## Open & Run
 
-1. Open the Xcode project at:
-
+1. Open the Xcode project:
+   ```bash
    open "My Enphase.xcodeproj"
+   ```
 
-2. Choose your development team under Signing & Capabilities.
-3. Build and run on a simulator or device.
+2. Choose your development team under Signing & Capabilities
+3. Build and run on a simulator or device
 
 ## Configuration (In-App)
 
-1. Launch the app and open `Settings`.
+1. Launch the app and tap the **gear icon** (⚙️) to open Settings
 2. Enter API credentials:
    - API Key
    - Client ID
    - Client Secret
    - Refresh Token (required for in-app requests)
-3. Add one or more systems via `Add System` (enter System ID and a friendly name).
-4. Save configuration.
+3. Add one or more systems via `Add System` (enter System ID and friendly name)
+4. Save configuration
 
-Note: The app currently expects a pre-obtained refresh token. An in-app OAuth authorization flow is planned.
+**Note**: The app currently expects a pre-obtained refresh token. An in-app OAuth authorization flow is planned.
 
 ### Finding Your System ID
 
 1. Log into https://enlighten.enphaseenergy.com
-2. Select a system and inspect the URL such as:
-
+2. Select a system and inspect the URL:
+   ```
    https://enlighten.enphaseenergy.com/systems/SYSTEM_ID/overview
+   ```
+3. The numeric `SYSTEM_ID` is what you enter in the app
 
-3. The numeric `SYSTEM_ID` is what you enter in the app.
+## UI Overview
+
+### Navigation Bar
+- **Title**: "ENPHASE MULTI-SYSTEM MONITOR" (19pt, orange, monospaced)
+- **Settings**: Gear icon (⚙️) in top-right corner
+
+### Report Stats (Header)
+- **Updated**: Timestamp showing last data refresh
+- **Orange separators** frame the stats section
+
+### Combined Energy Report
+- **Produced**: Total solar generation with sun icon (☀️)
+- **Consumed**: Total household consumption
+- **Net Flow**: Grid import/export with directional arrows
+  - Pink ⬇️ for import (buying from grid)
+  - Cyan ⬆️ for export (selling to grid)
+
+### Individual Systems Report
+For each system:
+- **Grid Import**: Pink with down arrow icon
+- **Grid Export**: Cyan with up arrow icon
+- **Produced**: Yellow with sun.max.fill icon (☀️)
+- **Net Grid Flow**: Shows import/export with arrows
+- **Charged**: Green (#7acf38) with battery.100percent.bolt icon (🔋⚡)
+- **Discharged**: Green (#7acf38) with battery.0percent icon (🔋)
+- **Percent**: Battery state of charge (SOC) percentage
+- **Total Consumed**: Orange
+
+## Features
+
+### Pull-to-Refresh
+- **Pull down** on any screen to refresh data
+- **Smart caching**: If data is < 60 seconds old, serves cached data immediately
+- **No unnecessary API calls**: Respects cache TTL to avoid rate limits
+- **Automatic retry**: Handles rate limit errors with intelligent backoff
+
+### Intelligent Caching
+- **60-second TTL**: Fresh data is reused to minimize API calls
+- **Persistent cache**: Survives app restarts
+- **Stale data fallback**: Shows cached data if API fails
+- **Per-endpoint caching**: Each API call is independently cached
+
+### Visual Design
+- **Monospaced fonts**: 16pt for content, 19pt for title
+- **Icon integration**: SF Symbols sized at 15pt for perfect alignment
+- **Color coding**:
+  - Orange: Headings, consumed energy, navigation title
+  - Yellow: Solar production
+  - Pink: Grid import
+  - Cyan: Grid export
+  - Green (#7acf38): Battery metrics
+- **16pt left padding**: Content slightly indented for visual breathing room
 
 ## Project Structure
 
-- Models: [My Enphase/Models/EnphaseModels.swift](My%20Enphase/Models/EnphaseModels.swift)
+### Models
+- [My Enphase/Models/EnphaseModels.swift](My%20Enphase/Models/EnphaseModels.swift)
   - `SystemMetrics`, `AggregatedMetrics`, `APIConfig`, `AppConfig`
 
-- Services:
-  - [My Enphase/Services/EnphaseAPIClient.swift](My%20Enphase/Services/EnphaseAPIClient.swift) — API client with OAuth refresh, telemetry endpoints, rate-limit handling, and helper calculations
-  - [My Enphase/Services/DataAggregator.swift](My%20Enphase/Services/DataAggregator.swift) — Orchestrates multi-system requests and aggregates metrics
-  - [My Enphase/Services/ConfigManager.swift](My%20Enphase/Services/ConfigManager.swift) — Persists `AppConfig` to `UserDefaults` and provides helpers to add/remove systems
+### Services
+- [My Enphase/Services/EnphaseAPIClient.swift](My%20Enphase/Services/EnphaseAPIClient.swift)
+  - API client with OAuth refresh, telemetry endpoints
+  - Rate-limit handling with automatic retry
+  - Per-endpoint response caching (60-second TTL)
+  
+- [My Enphase/Services/APICache.swift](My%20Enphase/Services/APICache.swift)
+  - Persistent cache with disk storage
+  - Automatic expiration and cleanup
+  
+- [My Enphase/Services/DataAggregator.swift](My%20Enphase/Services/DataAggregator.swift)
+  - Orchestrates multi-system requests
+  - Aggregates metrics with report-level caching
+  - Handles pull-to-refresh with cache awareness
+  
+- [My Enphase/Services/ConfigManager.swift](My%20Enphase/Services/ConfigManager.swift)
+  - Persists `AppConfig` to `UserDefaults`
+  - System add/remove helpers
 
-- Views: [My Enphase/Views](My%20Enphase/Views)
-  - `DashboardView.swift` — Main UI and coordinator
-  - `SettingsView.swift` — Configure API credentials and systems
-  - `Components/` — `HeaderView`, `CombinedReportView`, `IndividualSystemsView`
+### Views
+- [My Enphase/Views/DashboardView.swift](My%20Enphase/Views/DashboardView.swift)
+  - Main UI coordinator with pull-to-refresh
+  - Navigation bar with title and settings
+  
+- [My Enphase/Views/SettingsView.swift](My%20Enphase/Views/SettingsView.swift)
+  - Configure API credentials and systems
+  
+- **Components**:
+  - `ReportStatsView` — Updated timestamp header
+  - `CombinedReportView` — Aggregated totals
+  - `IndividualSystemsView` — Per-system breakdown with icons
 
-## Implementation Notes (from code)
+## Implementation Notes
 
-- OAuth: `EnphaseAPIClient.refreshAccessToken(using:)` performs a token refresh using the configured `authorizationURL` and caches the `access_token` until expiry.
-- API key: The client appends the API key as a URL parameter to each request (per the current implementation).
-- Endpoints: Production, consumption, battery, import/export telemetry endpoints are called individually for each system; each refresh can produce multiple API calls per system.
-- Rate limits: The client maps HTTP 429 to a `rateLimitExceeded` error; the UI uses manual refresh to avoid uncontrolled polling.
-- Persistence: `ConfigManager` stores `AppConfig` in `UserDefaults` under the `enphase_app_config` key.
+### OAuth
+- `EnphaseAPIClient.refreshAccessToken(using:)` performs token refresh
+- Caches `access_token` until expiry
+- API key appended as URL parameter to each request
+
+### API Endpoints
+Production, consumption, battery, import/export telemetry endpoints are called individually for each system. Each refresh can produce 4-6 API calls per system.
+
+### Rate Limits
+- HTTP 429 mapped to `rateLimitExceeded` error
+- 60-second cache prevents excessive API calls
+- Manual refresh control prevents uncontrolled polling
+- Automatic retry with configurable wait time
+
+### Persistence
+- **Config**: `UserDefaults` key `enphase_app_config`
+- **API Cache**: Disk-persisted at `enphase_api_cache.json`
+- **Report Cache**: Disk-persisted at `enphase_report_cache.json`
 
 ## Usage
 
-- Tap the refresh control to fetch current data (DataAggregator will call the API for each configured system).
-- Use the calendar control to switch between Day / Month / Year queries.
+### Daily Monitoring
+1. **Launch app** — shows most recent data from cache if available
+2. **Pull down** to refresh if cache is stale (> 60 seconds)
+3. View combined totals and individual system breakdowns
+4. **Scroll down** to see "Updated:" timestamp at bottom
+
+### Managing Settings
+1. Tap **gear icon** (⚙️)
+2. Modify API credentials or systems
+3. Tap **Save**
+4. App auto-refreshes if configured and no data loaded
 
 ## Troubleshooting
 
-- "Authentication Required": verify `API Key`, `Client ID`, `Client Secret`, and `Refresh Token` in `Settings`.
-- "Rate Limit Exceeded": wait ~60 seconds and try again; limit API calls when multiple systems are configured.
-- No data: ensure your systems are reporting to Enlighten and system IDs are correct.
+### "Authentication Required"
+- Verify `API Key`, `Client ID`, `Client Secret`, and `Refresh Token` in Settings
+- Ensure credentials match (from same Enphase app in Developer Portal)
+
+### "Rate Limit Exceeded"
+- Wait 60 seconds before retrying
+- Cache reduces frequency of API calls
+- Consider spacing out refreshes when monitoring multiple systems
+
+### "Network error: cancelled"
+- Caused by overlapping refresh requests
+- App now uses detached tasks to prevent cancellation
+- Pull-to-refresh checks if fetch is already in progress
+
+### No Data
+- Ensure systems are reporting to Enlighten
+- Verify system IDs are correct (check Enlighten URLs)
+- Check API credentials are active in Developer Portal
 
 ## Future Work
 
-- In-app OAuth flow (obtain refresh token inside the app)
-- Response caching for offline viewing
-- Background refresh with notifications
-- Charts for historical trends, widget and Watch support
+- **In-app OAuth flow** (obtain refresh token inside app)
+- **Historical queries** (day/month/year)
+- **Charts** for trend visualization
+- **Background refresh** with notifications
+- **Widgets** and Apple Watch support
+- **Export data** to CSV
 
 ## Related Projects
 
-If you use a companion CLI or helper (external) tool to obtain OAuth refresh tokens, keep its instructions with that project. This repository does not include the OAuth CLI.
+If you use a companion CLI tool to obtain OAuth refresh tokens, keep its instructions with that project. This repository does not include the OAuth CLI.
 
 ## License
 

@@ -26,6 +26,9 @@ enum APIError: Error, LocalizedError {
         case .invalidResponse:
             return "Invalid server response"
         case .httpError(let statusCode, let message):
+            if statusCode == 401 && message.contains("invalid_client") {
+                return "Authentication failed: Client ID and Client Secret don't match.\n\nPlease verify:\n• Client ID is correct\n• Client Secret matches the Client ID\n• Credentials are from the same Enphase app"
+            }
             return "HTTP \(statusCode): \(message)"
         case .decodingError(let error):
             return "Data decoding error: \(error.localizedDescription)"
@@ -39,15 +42,28 @@ enum APIError: Error, LocalizedError {
 
 // MARK: - API Response Models
 struct BatteryMetrics: Codable {
-    let enwh: Int?
+    let enwh: Double? // Energy values should be Double
+}
+
+struct BatterySOC: Codable {
+    let percent: Double
+    let devicesReporting: Int?
+    
+    enum CodingKeys: String, CodingKey {
+        case percent
+        case devicesReporting = "devices_reporting"
+    }
 }
 
 struct TelemetryInterval: Codable {
     let endAt: Int
     let devicesReporting: Int?
-    let whDel: Int?
-    let whRec: Int?
-    let enwh: Int?
+    let whDel: Double?      // Energy values should be Double
+    let whRec: Double?      // Energy values should be Double
+    let enwh: Double?       // Energy values should be Double
+    let whImported: Double? // For grid import endpoints (maps to wh_imported JSON key)
+    let whExported: Double? // For grid export endpoints (maps to wh_exported JSON key)
+    let soc: BatterySOC?    // Battery state of charge object
     let charge: BatteryMetrics?
     let discharge: BatteryMetrics?
     
@@ -57,6 +73,9 @@ struct TelemetryInterval: Codable {
         case whDel = "wh_del"
         case whRec = "wh_rec"
         case enwh
+        case whImported = "wh_imported"
+        case whExported = "wh_exported"
+        case soc
         case charge
         case discharge
     }
@@ -139,10 +158,15 @@ class EnphaseAPIClient: ObservableObject {
             request.setValue("Basic \(base64Credentials)", forHTTPHeaderField: "Authorization")
         }
         
+        // URL encode the refresh token to handle special characters
+        guard let encodedRefreshToken = config.refreshToken.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+            throw APIError.invalidURL
+        }
+        
         // Only send grant_type and refresh_token in body (NOT client_id/client_secret)
         let bodyParams = [
             "grant_type=refresh_token",
-            "refresh_token=\(config.refreshToken)"
+            "refresh_token=\(encodedRefreshToken)"
         ].joined(separator: "&")
         
         request.httpBody = bodyParams.data(using: .utf8)
@@ -181,13 +205,37 @@ class EnphaseAPIClient: ObservableObject {
         accessToken: String,
         apiKey: String
     ) async throws -> T {
+        // URL encode the API key to handle special characters
+        guard let encodedApiKey = apiKey.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+            throw APIError.invalidURL
+        }
+        
         // API key must be in URL parameters, not headers
         let separator = endpoint.contains("?") ? "&" : "?"
-        let urlString = "\(baseURL)/\(endpoint)\(separator)key=\(apiKey)"
+        let urlString = "\(baseURL)/\(endpoint)\(separator)key=\(encodedApiKey)"
         
         guard let url = URL(string: urlString) else {
             throw APIError.invalidURL
         }
+        
+        // Check cache first
+        print("🔍 Checking cache for URL: \(urlString.prefix(100))...")
+        if let cached = APICache.shared.getCachedResponse(for: urlString) {
+            do {
+                // Try to decode cached data
+                let decoded = try JSONDecoder().decode(T.self, from: cached.data)
+                print("✅ Using cached response")
+                return decoded
+            } catch {
+                // Cache contains invalid data - clear it and fetch fresh
+                print("⚠️ Cache data invalid, fetching fresh: \(error)")
+                APICache.shared.clearCache(for: urlString)
+            }
+        } else {
+            print("🌐 No valid cache, making live API request")
+        }
+        
+        // Make live API request
         
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
@@ -207,6 +255,20 @@ class EnphaseAPIClient: ObservableObject {
                     if let jsonString = String(data: data, encoding: .utf8) {
                         print("📥 API Response: \(jsonString.prefix(500))")
                     }
+                    
+                    // Store in cache before decoding
+                    let headers = httpResponse.allHeaderFields.reduce(into: [String: String]()) { result, header in
+                        if let key = header.key as? String, let value = header.value as? String {
+                            result[key] = value
+                        }
+                    }
+                    APICache.shared.cacheResponse(
+                        for: urlString,
+                        data: data,
+                        statusCode: httpResponse.statusCode,
+                        headers: headers
+                    )
+                    
                     return try JSONDecoder().decode(T.self, from: data)
                 } catch {
                     print("❌ Decoding error: \(error)")
@@ -244,7 +306,9 @@ class EnphaseAPIClient: ObservableObject {
         let startTimestamp = Int(startDate.timeIntervalSince1970)
         let endTimestamp = Int(endDate.timeIntervalSince1970)
         
-        let endpoint = "systems/\(systemID)/telemetry/production_meter?start_at=\(startTimestamp)&end_at=\(endTimestamp)&granularity=15mins"
+        print("📡 Production API: start=\(startTimestamp) (\(startDate)), end=\(endTimestamp) (\(endDate)), duration=\(endTimestamp-startTimestamp)s")
+        
+        let endpoint = "systems/\(systemID)/telemetry/production_meter?start_at=\(startTimestamp)&end_at=\(endTimestamp)"
         
         return try await makeRequest(endpoint: endpoint, accessToken: accessToken, apiKey: config.apiKey)
     }
@@ -261,7 +325,9 @@ class EnphaseAPIClient: ObservableObject {
         let startTimestamp = Int(startDate.timeIntervalSince1970)
         let endTimestamp = Int(endDate.timeIntervalSince1970)
         
-        let endpoint = "systems/\(systemID)/telemetry/battery?start_at=\(startTimestamp)&end_at=\(endTimestamp)&granularity=15mins"
+        print("📡 Battery API: start=\(startTimestamp), end=\(endTimestamp), duration=\(endTimestamp-startTimestamp)s")
+        
+        let endpoint = "systems/\(systemID)/telemetry/battery?start_at=\(startTimestamp)&end_at=\(endTimestamp)"
         
         return try await makeRequest(endpoint: endpoint, accessToken: accessToken, apiKey: config.apiKey)
     }
@@ -278,7 +344,9 @@ class EnphaseAPIClient: ObservableObject {
         let startTimestamp = Int(startDate.timeIntervalSince1970)
         let endTimestamp = Int(endDate.timeIntervalSince1970)
         
-        let endpoint = "systems/\(systemID)/telemetry/consumption_meter?start_at=\(startTimestamp)&end_at=\(endTimestamp)&granularity=15mins"
+        print("📡 Consumption API: start=\(startTimestamp), end=\(endTimestamp), duration=\(endTimestamp-startTimestamp)s")
+        
+        let endpoint = "systems/\(systemID)/telemetry/consumption_meter?start_at=\(startTimestamp)&end_at=\(endTimestamp)"
         
         return try await makeRequest(endpoint: endpoint, accessToken: accessToken, apiKey: config.apiKey)
     }
@@ -295,13 +363,16 @@ class EnphaseAPIClient: ObservableObject {
         let startTimestamp = Int(startDate.timeIntervalSince1970)
         let endTimestamp = Int(endDate.timeIntervalSince1970)
         
-        let endpoint = "systems/\(systemID)/energy_import_telemetry?start_at=\(startTimestamp)&end_at=\(endTimestamp)&granularity=15mins"
+        print("📡 Grid Import API: start=\(startTimestamp), end=\(endTimestamp), duration=\(endTimestamp-startTimestamp)s")
+        
+        let endpoint = "systems/\(systemID)/energy_import_telemetry?start_at=\(startTimestamp)&end_at=\(endTimestamp)"
         
         struct ImportResponse: Codable {
             let intervals: [[TelemetryInterval]]
         }
         
         let response: ImportResponse = try await makeRequest(endpoint: endpoint, accessToken: accessToken, apiKey: config.apiKey)
+        print("📊 Grid Import Response: \(response.intervals.count) nested arrays, total intervals: \(response.intervals.flatMap { $0 }.count)")
         return response.intervals
     }
     
@@ -317,40 +388,57 @@ class EnphaseAPIClient: ObservableObject {
         let startTimestamp = Int(startDate.timeIntervalSince1970)
         let endTimestamp = Int(endDate.timeIntervalSince1970)
         
-        let endpoint = "systems/\(systemID)/energy_export_telemetry?start_at=\(startTimestamp)&end_at=\(endTimestamp)&granularity=15mins"
+        print("📡 Grid Export API: start=\(startTimestamp), end=\(endTimestamp), duration=\(endTimestamp-startTimestamp)s")
+        
+        let endpoint = "systems/\(systemID)/energy_export_telemetry?start_at=\(startTimestamp)&end_at=\(endTimestamp)"
         
         struct ExportResponse: Codable {
             let intervals: [[TelemetryInterval]]
         }
         
         let response: ExportResponse = try await makeRequest(endpoint: endpoint, accessToken: accessToken, apiKey: config.apiKey)
+        print("📊 Grid Export Response: \(response.intervals.count) nested arrays, total intervals: \(response.intervals.flatMap { $0 }.count)")
         return response.intervals
     }
     
     // MARK: - Helper Methods
-    func calculateDailyTotal(from intervals: [TelemetryInterval], field: KeyPath<TelemetryInterval, Int?>) -> Double {
+    func calculateDailyTotal(from intervals: [TelemetryInterval], field: KeyPath<TelemetryInterval, Double?>) -> Double {
         let total = intervals.reduce(0) { sum, interval in
             sum + (interval[keyPath: field] ?? 0)
         }
-        return Double(total) / 1000.0 // Convert Wh to kWh
+        let kWh = total / 1000.0
+        print("  📈 Raw total: \(total) Wh = \(kWh) kWh from \(intervals.count) intervals")
+        if intervals.count > 0 {
+            let sample = intervals.prefix(3).map { interval -> String in
+                let value = interval[keyPath: field] ?? 0
+                return "\(value)Wh"
+            }.joined(separator: ", ")
+            print("  📋 Sample values: \(sample)")
+        }
+        return kWh
     }
     
-    func calculateDailyTotalFromNested(from nestedIntervals: [[TelemetryInterval]], field: KeyPath<TelemetryInterval, Int?>) -> Double {
+    func calculateDailyTotalFromNested(from nestedIntervals: [[TelemetryInterval]], field: KeyPath<TelemetryInterval, Double?>) -> Double {
         let flatIntervals = nestedIntervals.flatMap { $0 }
-        return calculateDailyTotal(from: flatIntervals, field: field)
+        let total = calculateDailyTotal(from: flatIntervals, field: field)
+        print("📊 Calculated total from \(flatIntervals.count) intervals: \(total) kWh")
+        for (idx, interval) in flatIntervals.prefix(3).enumerated() {
+            print("  Sample interval \(idx): whImported=\(interval.whImported ?? -1), whExported=\(interval.whExported ?? -1), enwh=\(interval.enwh ?? -1)")
+        }
+        return total
     }
     
     func calculateBatteryCharged(from intervals: [TelemetryInterval]) -> Double {
         let total = intervals.reduce(0) { sum, interval in
             sum + (interval.charge?.enwh ?? 0)
         }
-        return Double(total) / 1000.0 // Convert Wh to kWh
+        return total / 1000.0 // Convert Wh to kWh
     }
     
     func calculateBatteryDischarged(from intervals: [TelemetryInterval]) -> Double {
         let total = intervals.reduce(0) { sum, interval in
             sum + (interval.discharge?.enwh ?? 0)
         }
-        return Double(total) / 1000.0 // Convert Wh to kWh
+        return total / 1000.0 // Convert Wh to kWh
     }
 }
