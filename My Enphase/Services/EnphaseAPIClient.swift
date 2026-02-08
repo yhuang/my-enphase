@@ -131,8 +131,23 @@ struct OAuthTokenResponse: Codable {
 // MARK: - API Client
 class EnphaseAPIClient: ObservableObject {
     private let baseURL = "https://api.enphaseenergy.com/api/v4"
+    private let session: URLSession
     @Published var currentAccessToken: String?
     private var accessTokenExpiry: Date?
+    
+    init() {
+        // Configure URLSession with proper timeouts and connection limits
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 30
+        config.timeoutIntervalForResource = 60
+        config.httpMaximumConnectionsPerHost = 4
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        self.session = URLSession(configuration: config)
+    }
+    
+    deinit {
+        session.invalidateAndCancel()
+    }
     
     // MARK: - OAuth Token Management
     func refreshAccessToken(using config: APIConfig) async throws -> String {
@@ -172,7 +187,7 @@ class EnphaseAPIClient: ObservableObject {
         request.httpBody = bodyParams.data(using: .utf8)
         
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await session.data(for: request)
             
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw APIError.invalidResponse
@@ -242,7 +257,7 @@ class EnphaseAPIClient: ObservableObject {
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await session.data(for: request)
             
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw APIError.invalidResponse

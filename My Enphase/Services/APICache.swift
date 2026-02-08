@@ -7,6 +7,10 @@
 
 import Foundation
 
+#if canImport(UIKit)
+import UIKit
+#endif
+
 class APICache {
     static let shared = APICache()
     
@@ -22,6 +26,7 @@ class APICache {
     private let cacheTTL: TimeInterval = 60 // 60 seconds
     private let maxEntries = 20
     private let cacheFileURL: URL
+    private var saveCacheWorkItem: DispatchWorkItem?
     
     private init() {
         // Get cache directory
@@ -30,6 +35,29 @@ class APICache {
         
         // Load cache from disk
         loadCacheFromDisk()
+        
+        // Observe memory warnings to clear cache
+        #if canImport(UIKit)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleMemoryWarning),
+            name: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil
+        )
+        #endif
+    }
+    
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+    
+    @objc private func handleMemoryWarning() {
+        cacheQueue.async(flags: .barrier) {
+            print("⚠️ Memory warning received - clearing in-memory cache")
+            let count = self.cache.count
+            self.cache.removeAll()
+            print("📦 Cleared \(count) cache entries from memory (disk cache preserved)")
+        }
     }
     
     /// Check if cache entry exists and is still valid (< 60 seconds old)
@@ -58,27 +86,29 @@ class APICache {
     /// Store a response in cache with current timestamp
     func cacheResponse(for url: String, data: Data, statusCode: Int, headers: [String: String]) {
         cacheQueue.async(flags: .barrier) {
-            // Evict expired entries before adding new ones to prevent unbounded growth
             let now = Date()
+            
+            // Evict expired entries first to prevent unbounded growth
             self.cache = self.cache.filter { _, entry in
                 now.timeIntervalSince(entry.timestamp) < self.cacheTTL
             }
 
+            // Enforce maxEntries limit BEFORE adding new entry to prevent race conditions
+            if self.cache.count >= self.maxEntries {
+                let sorted = self.cache.sorted { $0.value.timestamp < $1.value.timestamp }
+                let toRemove = self.cache.count - self.maxEntries + 1
+                for (key, _) in sorted.prefix(toRemove) {
+                    self.cache.removeValue(forKey: key)
+                }
+            }
+
+            // Now safe to add new entry
             self.cache[url] = CacheEntry(
                 data: data,
                 timestamp: now,
                 statusCode: statusCode,
                 headers: headers
             )
-
-            // If still over the cap, remove oldest entries
-            if self.cache.count > self.maxEntries {
-                let sorted = self.cache.sorted { $0.value.timestamp < $1.value.timestamp }
-                let toRemove = self.cache.count - self.maxEntries
-                for (key, _) in sorted.prefix(toRemove) {
-                    self.cache.removeValue(forKey: key)
-                }
-            }
 
             print("📦 Cache STORED for \(self.redactURL(url)) (\(data.count) bytes) - Total cached entries: \(self.cache.count)")
 
@@ -105,17 +135,27 @@ class APICache {
         }
     }
     
-    /// Save cache to disk
+    /// Save cache to disk (debounced to reduce I/O frequency)
     private func saveCacheToDisk() {
-        do {
-            let encoder = JSONEncoder()
-            encoder.dateEncodingStrategy = .iso8601
-            let data = try encoder.encode(cache)
-            try data.write(to: cacheFileURL, options: .atomic)
-            print("💾 Cache saved to disk (\(cache.count) entries)")
-        } catch {
-            print("⚠️ Failed to save cache to disk: \(error)")
+        // Cancel any pending save operation
+        saveCacheWorkItem?.cancel()
+        
+        // Schedule new save after 2 seconds of inactivity
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            do {
+                let encoder = JSONEncoder()
+                encoder.dateEncodingStrategy = .iso8601
+                let data = try encoder.encode(self.cache)
+                try data.write(to: self.cacheFileURL, options: .atomic)
+                print("💾 Cache saved to disk (\(self.cache.count) entries)")
+            } catch {
+                print("⚠️ Failed to save cache to disk: \(error)")
+            }
         }
+        
+        saveCacheWorkItem = workItem
+        cacheQueue.asyncAfter(deadline: .now() + 2.0, execute: workItem)
     }
     
     /// Load cache from disk

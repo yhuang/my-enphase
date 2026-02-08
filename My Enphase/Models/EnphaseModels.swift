@@ -15,7 +15,7 @@ enum QueryType: String, Codable {
 }
 
 // MARK: - System Metrics
-struct SystemMetrics: Identifiable, Codable {
+struct SystemMetrics: Identifiable, Codable, @unchecked Sendable {
     let id: String
     let name: String
     let productionToday: Double
@@ -42,7 +42,7 @@ struct SystemMetrics: Identifiable, Codable {
 }
 
 // MARK: - Aggregated Metrics
-struct AggregatedMetrics: Codable {
+struct AggregatedMetrics: Codable, @unchecked Sendable {
     let timestamp: Date
     let productionToday: Double
     let consumptionToday: Double

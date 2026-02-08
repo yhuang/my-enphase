@@ -11,7 +11,8 @@ import SwiftUI
 struct Enphase_Monitor_AppApp: App {
     init() {
         // Set black background for launch screen
-        if let window = UIApplication.shared.windows.first {
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let window = windowScene.windows.first {
             window.backgroundColor = .black
         }
     }

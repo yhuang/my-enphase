@@ -19,6 +19,7 @@ class DataAggregator: ObservableObject {
     private let cacheTTL: TimeInterval = 60 // 60 seconds
     private let cacheFileURL: URL
     private var currentFetchTask: Task<Void, Never>?
+    private let saveQueue = DispatchQueue(label: "com.enphase.reportcache", qos: .utility)
     
     init() {
         // Get cache directory
@@ -27,40 +28,52 @@ class DataAggregator: ObservableObject {
     }
     
     /// Load cached report from disk if still valid
-    private func loadCachedReport() -> (metrics: AggregatedMetrics, timestamp: Date)? {
-        guard FileManager.default.fileExists(atPath: cacheFileURL.path) else {
-            print("💾 No cached report file exists")
-            return nil
-        }
-        
-        do {
-            let data = try Data(contentsOf: cacheFileURL)
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
+    private func loadCachedReport() async -> (metrics: AggregatedMetrics, timestamp: Date)? {
+        return await Task {
+            guard FileManager.default.fileExists(atPath: cacheFileURL.path) else {
+                print("💾 No cached report file exists")
+                return nil
+            }
             
-            let cached = try decoder.decode(CachedReport.self, from: data)
-            return (cached.metrics, cached.timestamp)
-        } catch {
-            print("💾 ❌ Failed to load cached report: \(error)")
-            return nil
-        }
+            do {
+                let data = try Data(contentsOf: cacheFileURL)
+                let decoder = JSONDecoder()
+                decoder.dateDecodingStrategy = .iso8601
+                
+                let cached = try decoder.decode(CachedReport.self, from: data)
+                return (cached.metrics, cached.timestamp)
+            } catch {
+                print("💾 ❌ Failed to load cached report: \(error)")
+                return nil
+            }
+        }.value
     }
     
-    /// Save report to disk
+    /// Save report to disk (thread-safe with serialization)
     private func saveCachedReport(_ metrics: AggregatedMetrics) {
-        do {
-            let cached = CachedReport(metrics: metrics, timestamp: Date())
-            let encoder = JSONEncoder()
-            encoder.dateEncodingStrategy = .iso8601
-            let data = try encoder.encode(cached)
-            try data.write(to: cacheFileURL, options: .atomic)
-            print("💾 Report saved to disk")
-        } catch {
-            print("⚠️ Failed to save report to disk: \(error)")
+        saveQueue.async { [weak self] in
+            guard let self = self else { return }
+            do {
+                let cached = CachedReport(metrics: metrics, timestamp: Date())
+                let encoder = JSONEncoder()
+                encoder.dateEncodingStrategy = .iso8601
+                let data = try encoder.encode(cached)
+                
+                // Prevent saving excessively large reports to avoid unbounded disk usage
+                guard data.count < 5_000_000 else { // 5 MB safety limit
+                    print("⚠️ Report too large (\(data.count) bytes) - not caching to disk")
+                    return
+                }
+                
+                try data.write(to: self.cacheFileURL, options: .atomic)
+                print("💾 Report saved to disk (\(data.count) bytes)")
+            } catch {
+                print("⚠️ Failed to save report to disk: \(error)")
+            }
         }
     }
     
-    private struct CachedReport: Codable {
+    private struct CachedReport: Codable, @unchecked Sendable {
         let metrics: AggregatedMetrics
         let timestamp: Date
     }
@@ -69,19 +82,16 @@ class DataAggregator: ObservableObject {
     func refreshMetrics(config: AppConfig) async {
         print("🔄 Pull-to-refresh triggered at \(Date())")
         
-        // Cancel any existing fetch task
-        currentFetchTask?.cancel()
-        
-        // If already loading, wait for it to complete or cancel
-        if isLoading {
-            print("⚠️ Already loading, cancelling previous fetch")
-            currentFetchTask?.cancel()
-            // Give it a moment to cancel
-            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+        // Cancel any existing fetch task and wait for it to complete
+        if let existingTask = currentFetchTask {
+            print("⚠️ Cancelling previous fetch task")
+            existingTask.cancel()
+            await existingTask.value
+            currentFetchTask = nil
         }
         
         // Check if cached data is still fresh
-        if let cached = loadCachedReport() {
+        if let cached = await loadCachedReport() {
             let dataAge = Date().timeIntervalSince(cached.metrics.timestamp)
             print("📦 Found cached data with age: \(String(format: "%.1f", dataAge))s (TTL: \(cacheTTL)s)")
             
@@ -107,12 +117,13 @@ class DataAggregator: ObservableObject {
             await self.performFetch(config: config)
         }
         await currentFetchTask?.value
+        currentFetchTask = nil  // Clear task reference to prevent memory leak
         print("🔄 performFetch completed")
     }
     
     func fetchMetrics(config: AppConfig) async {
         // Check if we have cached data first
-        if let cached = loadCachedReport() {
+        if let cached = await loadCachedReport() {
             let dataAge = Date().timeIntervalSince(cached.metrics.timestamp)
             
             // Check if the actual data timestamp is fresh enough
@@ -263,16 +274,15 @@ class DataAggregator: ObservableObject {
             )
             
             // Save aggregated report to disk
-            let timestamp = Date()
             saveCachedReport(aggregated)
             
             await MainActor.run {
                 self.metrics = aggregated
-                self.lastUpdated = timestamp
+                self.lastUpdated = Date()
                 self.isLoading = false
             }
             
-            print("📦 Report cached at \(timestamp)")
+            print("📦 Report cached at \(Date())")
             
             print("✅ Fetch completed successfully at \(Date())")
             
@@ -283,7 +293,7 @@ class DataAggregator: ObservableObject {
             if let urlError = error as? URLError, urlError.code == .cancelled {
                 print("⚠️ Request was cancelled - this is likely due to a view update or gesture cancellation")
                 // Don't treat cancellation as a hard error - just use cached data if available
-                if let fallbackCache = loadCachedReport() {
+                if let fallbackCache = await loadCachedReport() {
                     let dataAge = Date().timeIntervalSince(fallbackCache.metrics.timestamp)
                     print("📦 Using cached report after cancellation (data age: \(String(format: "%.1f", dataAge))s)")
                     await MainActor.run {
@@ -319,7 +329,7 @@ class DataAggregator: ObservableObject {
             
             // For non-rate-limit errors, try to use cached data as fallback
             print("🔍 Attempting to load ANY cached report as fallback...")
-            if let fallbackCache = loadCachedReport() {
+            if let fallbackCache = await loadCachedReport() {
                 let dataAge = Date().timeIntervalSince(fallbackCache.metrics.timestamp)
                 print("📦 Using STALE cached report as fallback (data age: \(String(format: "%.1f", dataAge))s)")
                 await MainActor.run {
