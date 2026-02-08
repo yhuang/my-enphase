@@ -26,8 +26,12 @@ enum APIError: Error, LocalizedError {
         case .invalidResponse:
             return "Invalid server response"
         case .httpError(let statusCode, let message):
-            if statusCode == 401 && message.contains("invalid_client") {
-                return "Authentication failed: Client ID and Client Secret don't match.\n\nPlease verify:\n• Client ID is correct\n• Client Secret matches the Client ID\n• Credentials are from the same Enphase app"
+            if statusCode == 401 {
+                if message.contains("invalid_client") {
+                    return "Authentication failed: Client ID and Client Secret don't match.\n\nPlease verify:\n• Client ID is correct\n• Client Secret matches the Client ID\n• Credentials are from the same Enphase app"
+                } else {
+                    return "Authentication failed (HTTP 401). Please check your API credentials and refresh token."
+                }
             }
             return "HTTP \(statusCode): \(message)"
         case .decodingError(let error):
@@ -234,20 +238,20 @@ class EnphaseAPIClient: ObservableObject {
         }
         
         // Check cache first
-        print("🔍 Checking cache for URL: \(urlString.prefix(100))...")
+        DebugLogger.log("🔍 Checking cache for URL: \(urlString.prefix(100))...")
         if let cached = APICache.shared.getCachedResponse(for: urlString) {
             do {
                 // Try to decode cached data
                 let decoded = try JSONDecoder().decode(T.self, from: cached.data)
-                print("✅ Using cached response")
+                DebugLogger.log("✅ Using cached response")
                 return decoded
             } catch {
                 // Cache contains invalid data - clear it and fetch fresh
-                print("⚠️ Cache data invalid, fetching fresh: \(error)")
+                DebugLogger.log("⚠️ Cache data invalid, fetching fresh: \(error)")
                 APICache.shared.clearCache(for: urlString)
             }
         } else {
-            print("🌐 No valid cache, making live API request")
+            DebugLogger.log("🌐 No valid cache, making live API request")
         }
         
         // Make live API request
@@ -268,7 +272,7 @@ class EnphaseAPIClient: ObservableObject {
                 do {
                     // Debug: Print the raw response
                     if let jsonString = String(data: data, encoding: .utf8) {
-                        print("📥 API Response: \(jsonString.prefix(500))")
+                        DebugLogger.log("📥 API Response: \(jsonString.prefix(500))")
                     }
                     
                     // Store in cache before decoding
@@ -286,21 +290,31 @@ class EnphaseAPIClient: ObservableObject {
                     
                     return try JSONDecoder().decode(T.self, from: data)
                 } catch {
-                    print("❌ Decoding error: \(error)")
+                    DebugLogger.log("❌ Decoding error: \(error)")
                     if let jsonString = String(data: data, encoding: .utf8) {
-                        print("📄 Raw JSON: \(jsonString)")
+                        DebugLogger.log("📄 Raw JSON: \(jsonString)")
                     }
                     throw APIError.decodingError(error)
                 }
             case 401:
-                throw APIError.authenticationRequired
+                // Clean error message for authentication failures
+                throw APIError.httpError(statusCode: 401, message: "Authentication failed")
             case 429:
                 // Rate limit exceeded
                 let waitSeconds = 60 // Default wait time
                 throw APIError.rateLimitExceeded(waitSeconds: waitSeconds)
             default:
-                let message = String(data: data, encoding: .utf8) ?? "Unknown error"
-                throw APIError.httpError(statusCode: httpResponse.statusCode, message: message)
+                // Strip HTML responses and provide clean error messages
+                let rawMessage = String(data: data, encoding: .utf8) ?? "Unknown error"
+                let cleanMessage: String
+                if rawMessage.contains("<!DOCTYPE html>") || rawMessage.contains("<html") {
+                    // HTML error page - extract title or provide generic message
+                    cleanMessage = "Server returned error (HTTP \(httpResponse.statusCode))"
+                } else {
+                    // Truncate long messages
+                    cleanMessage = rawMessage.count > 200 ? String(rawMessage.prefix(200)) + "..." : rawMessage
+                }
+                throw APIError.httpError(statusCode: httpResponse.statusCode, message: cleanMessage)
             }
         } catch let error as APIError {
             throw error
@@ -321,7 +335,7 @@ class EnphaseAPIClient: ObservableObject {
         let startTimestamp = Int(startDate.timeIntervalSince1970)
         let endTimestamp = Int(endDate.timeIntervalSince1970)
         
-        print("📡 Production API: start=\(startTimestamp) (\(startDate)), end=\(endTimestamp) (\(endDate)), duration=\(endTimestamp-startTimestamp)s")
+        DebugLogger.log("📡 Production API: start=\(startTimestamp) (\(startDate)), end=\(endTimestamp) (\(endDate)), duration=\(endTimestamp-startTimestamp)s)")
         
         let endpoint = "systems/\(systemID)/telemetry/production_meter?start_at=\(startTimestamp)&end_at=\(endTimestamp)"
         
@@ -340,7 +354,7 @@ class EnphaseAPIClient: ObservableObject {
         let startTimestamp = Int(startDate.timeIntervalSince1970)
         let endTimestamp = Int(endDate.timeIntervalSince1970)
         
-        print("📡 Battery API: start=\(startTimestamp), end=\(endTimestamp), duration=\(endTimestamp-startTimestamp)s")
+        DebugLogger.log("📡 Battery API: start=\(startTimestamp), end=\(endTimestamp), duration=\(endTimestamp-startTimestamp)s)")
         
         let endpoint = "systems/\(systemID)/telemetry/battery?start_at=\(startTimestamp)&end_at=\(endTimestamp)"
         
@@ -359,7 +373,7 @@ class EnphaseAPIClient: ObservableObject {
         let startTimestamp = Int(startDate.timeIntervalSince1970)
         let endTimestamp = Int(endDate.timeIntervalSince1970)
         
-        print("📡 Consumption API: start=\(startTimestamp), end=\(endTimestamp), duration=\(endTimestamp-startTimestamp)s")
+        DebugLogger.log("📡 Consumption API: start=\(startTimestamp), end=\(endTimestamp), duration=\(endTimestamp-startTimestamp)s)")
         
         let endpoint = "systems/\(systemID)/telemetry/consumption_meter?start_at=\(startTimestamp)&end_at=\(endTimestamp)"
         
@@ -378,7 +392,7 @@ class EnphaseAPIClient: ObservableObject {
         let startTimestamp = Int(startDate.timeIntervalSince1970)
         let endTimestamp = Int(endDate.timeIntervalSince1970)
         
-        print("📡 Grid Import API: start=\(startTimestamp), end=\(endTimestamp), duration=\(endTimestamp-startTimestamp)s")
+        DebugLogger.log("📡 Grid Import API: start=\(startTimestamp), end=\(endTimestamp), duration=\(endTimestamp-startTimestamp)s")
         
         let endpoint = "systems/\(systemID)/energy_import_telemetry?start_at=\(startTimestamp)&end_at=\(endTimestamp)"
         
@@ -387,7 +401,7 @@ class EnphaseAPIClient: ObservableObject {
         }
         
         let response: ImportResponse = try await makeRequest(endpoint: endpoint, accessToken: accessToken, apiKey: config.apiKey)
-        print("📊 Grid Import Response: \(response.intervals.count) nested arrays, total intervals: \(response.intervals.flatMap { $0 }.count)")
+        DebugLogger.log("📊 Grid Import Response: \(response.intervals.count) nested arrays, total intervals: \(response.intervals.flatMap { $0 }.count)")
         return response.intervals
     }
     
@@ -403,7 +417,7 @@ class EnphaseAPIClient: ObservableObject {
         let startTimestamp = Int(startDate.timeIntervalSince1970)
         let endTimestamp = Int(endDate.timeIntervalSince1970)
         
-        print("📡 Grid Export API: start=\(startTimestamp), end=\(endTimestamp), duration=\(endTimestamp-startTimestamp)s")
+        DebugLogger.log("📡 Grid Export API: start=\(startTimestamp), end=\(endTimestamp), duration=\(endTimestamp-startTimestamp)s")
         
         let endpoint = "systems/\(systemID)/energy_export_telemetry?start_at=\(startTimestamp)&end_at=\(endTimestamp)"
         
@@ -412,7 +426,7 @@ class EnphaseAPIClient: ObservableObject {
         }
         
         let response: ExportResponse = try await makeRequest(endpoint: endpoint, accessToken: accessToken, apiKey: config.apiKey)
-        print("📊 Grid Export Response: \(response.intervals.count) nested arrays, total intervals: \(response.intervals.flatMap { $0 }.count)")
+        DebugLogger.log("📊 Grid Export Response: \(response.intervals.count) nested arrays, total intervals: \(response.intervals.flatMap { $0 }.count)")
         return response.intervals
     }
     
@@ -422,13 +436,13 @@ class EnphaseAPIClient: ObservableObject {
             sum + (interval[keyPath: field] ?? 0)
         }
         let kWh = total / 1000.0
-        print("  📈 Raw total: \(total) Wh = \(kWh) kWh from \(intervals.count) intervals")
+        DebugLogger.log("  📈 Raw total: \(total) Wh = \(kWh) kWh from \(intervals.count) intervals")
         if intervals.count > 0 {
             let sample = intervals.prefix(3).map { interval -> String in
                 let value = interval[keyPath: field] ?? 0
                 return "\(value)Wh"
             }.joined(separator: ", ")
-            print("  📋 Sample values: \(sample)")
+            DebugLogger.log("  📋 Sample values: \(sample)")
         }
         return kWh
     }
@@ -436,9 +450,9 @@ class EnphaseAPIClient: ObservableObject {
     func calculateDailyTotalFromNested(from nestedIntervals: [[TelemetryInterval]], field: KeyPath<TelemetryInterval, Double?>) -> Double {
         let flatIntervals = nestedIntervals.flatMap { $0 }
         let total = calculateDailyTotal(from: flatIntervals, field: field)
-        print("📊 Calculated total from \(flatIntervals.count) intervals: \(total) kWh")
+        DebugLogger.log("📊 Calculated total from \(flatIntervals.count) intervals: \(total) kWh")
         for (idx, interval) in flatIntervals.prefix(3).enumerated() {
-            print("  Sample interval \(idx): whImported=\(interval.whImported ?? -1), whExported=\(interval.whExported ?? -1), enwh=\(interval.enwh ?? -1)")
+            DebugLogger.log("  Sample interval \(idx): whImported=\(interval.whImported ?? -1), whExported=\(interval.whExported ?? -1), enwh=\(interval.enwh ?? -1)")
         }
         return total
     }
