@@ -53,10 +53,10 @@ class APICache {
     
     @objc private func handleMemoryWarning() {
         cacheQueue.async(flags: .barrier) {
-            print("⚠️ Memory warning received - clearing in-memory cache")
+            DebugLogger.log("⚠️ Memory warning received - clearing in-memory cache")
             let count = self.cache.count
             self.cache.removeAll()
-            print("📦 Cleared \(count) cache entries from memory (disk cache preserved)")
+            DebugLogger.log("📦 Cleared \(count) cache entries from memory (disk cache preserved)")
         }
     }
     
@@ -66,17 +66,17 @@ class APICache {
         
         cacheQueue.sync {
             guard let entry = cache[url] else {
-                print("📦 Cache MISS - no entry found")
+                DebugLogger.log("📦 Cache MISS - no entry found")
                 return
             }
             
             let age = Date().timeIntervalSince(entry.timestamp)
-            print("📦 Cache entry found, age: \(String(format: "%.1f", age))s, TTL: \(cacheTTL)s")
+            DebugLogger.log("📦 Cache entry found, age: \(String(format: "%.1f", age))s, TTL: \(cacheTTL)s")
             if age < cacheTTL {
                 result = (entry.data, entry.statusCode, entry.headers)
-                print("📦 Cache HIT for \(redactURL(url)) (age: \(String(format: "%.1f", age))s)")
+                DebugLogger.log("📦 Cache HIT for \(redactURL(url)) (age: \(String(format: "%.1f", age))s)")
             } else {
-                print("📦 Cache EXPIRED for \(redactURL(url)) (age: \(String(format: "%.1f", age))s)")
+                DebugLogger.log("📦 Cache EXPIRED for \(redactURL(url)) (age: \(String(format: "%.1f", age))s)")
             }
         }
         
@@ -110,7 +110,7 @@ class APICache {
                 headers: headers
             )
 
-            print("📦 Cache STORED for \(self.redactURL(url)) (\(data.count) bytes) - Total cached entries: \(self.cache.count)")
+            DebugLogger.log("📦 Cache STORED for \(self.redactURL(url)) (\(data.count) bytes) - Total cached entries: \(self.cache.count)")
 
             // Persist to disk
             self.saveCacheToDisk()
@@ -122,7 +122,7 @@ class APICache {
         cacheQueue.async(flags: .barrier) {
             self.cache.removeAll()
             self.saveCacheToDisk()
-            print("📦 Cache CLEARED")
+            DebugLogger.log("📦 Cache CLEARED")
         }
     }
     
@@ -131,7 +131,7 @@ class APICache {
         cacheQueue.async(flags: .barrier) {
             self.cache.removeValue(forKey: url)
             self.saveCacheToDisk()
-            print("📦 Cache CLEARED for \(self.redactURL(url))")
+            DebugLogger.log("📦 Cache CLEARED for \(self.redactURL(url))")
         }
     }
     
@@ -148,9 +148,9 @@ class APICache {
                 encoder.dateEncodingStrategy = .iso8601
                 let data = try encoder.encode(self.cache)
                 try data.write(to: self.cacheFileURL, options: .atomic)
-                print("💾 Cache saved to disk (\(self.cache.count) entries)")
+                DebugLogger.log("💾 Cache saved to disk (\(self.cache.count) entries)")
             } catch {
-                print("⚠️ Failed to save cache to disk: \(error)")
+                DebugLogger.log("⚠️ Failed to save cache to disk: \(error)")
             }
         }
         
@@ -161,7 +161,7 @@ class APICache {
     /// Load cache from disk
     private func loadCacheFromDisk() {
         guard FileManager.default.fileExists(atPath: cacheFileURL.path) else {
-            print("💾 No cache file found (starting fresh)")
+            DebugLogger.log("💾 No cache file found (starting fresh)")
             return
         }
 
@@ -169,7 +169,7 @@ class APICache {
         if let attrs = try? FileManager.default.attributesOfItem(atPath: cacheFileURL.path),
            let fileSize = attrs[.size] as? Int,
            fileSize > 5_000_000 { // 5 MB safety limit
-            print("⚠️ Cache file too large (\(fileSize) bytes) - deleting and starting fresh")
+            DebugLogger.log("⚠️ Cache file too large (\(fileSize) bytes) - deleting and starting fresh")
             try? FileManager.default.removeItem(at: cacheFileURL)
             return
         }
@@ -180,7 +180,7 @@ class APICache {
             decoder.dateDecodingStrategy = .iso8601
             cache = try decoder.decode([String: CacheEntry].self, from: data)
             let loadedCount = cache.count
-            print("💾 Cache loaded from disk (\(loadedCount) entries)")
+            DebugLogger.log("💾 Cache loaded from disk (\(loadedCount) entries)")
 
             // Clean up expired entries
             let now = Date()
@@ -191,14 +191,14 @@ class APICache {
             // Save cleaned cache back to disk to prevent file from growing unboundedly
             if cache.count < loadedCount {
                 saveCacheToDisk()
-                print("💾 Cleaned cache saved to disk (removed \(loadedCount - cache.count) expired entries)")
+                DebugLogger.log("💾 Cleaned cache saved to disk (removed \(loadedCount - cache.count) expired entries)")
             }
 
             if cache.count > 0 {
-                print("📦 \(cache.count) valid cached entries available")
+                DebugLogger.log("📦 \(cache.count) valid cached entries available")
             }
         } catch {
-            print("💾 Failed to load cache - deleting corrupt file and starting fresh")
+            DebugLogger.log("💾 Failed to load cache - deleting corrupt file and starting fresh")
             try? FileManager.default.removeItem(at: cacheFileURL)
             cache = [:]
         }

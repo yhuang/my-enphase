@@ -26,10 +26,9 @@ struct ReportStatsView: View {
             
             // Last Updated
             HStack(spacing: 0) {
-                Text("Updated:")
+                Text("Updated:  ")
                     .font(.system(size: 16, design: .monospaced))
                     .foregroundColor(.white)
-                    .frame(width: 120, alignment: .leading)
                 
                 Text(timeFormatter.string(from: timestamp))
                     .font(.system(size: 16, design: .monospaced))
