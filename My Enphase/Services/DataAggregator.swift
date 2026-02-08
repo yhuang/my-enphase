@@ -133,8 +133,9 @@ class DataAggregator: ObservableObject {
         await performFetch(config: config)
     }
     
-    private func performFetch(config: AppConfig) async {
-        print("🔄 Fetching today's data for \(config.systems.count) systems at \(Date())")
+    private func performFetch(config: AppConfig, retryCount: Int = 0) async {
+        let maxRetries = 2
+        print("🔄 Fetching today's data for \(config.systems.count) systems at \(Date()) (attempt \(retryCount + 1)/\(maxRetries + 1))")
         
         await MainActor.run {
             isLoading = true
@@ -298,15 +299,18 @@ class DataAggregator: ObservableObject {
             // Check if this is a rate limit error
             if let apiError = error as? APIError,
                case .rateLimitExceeded(let waitSeconds) = apiError {
-                print("⏳ Rate limit hit - waiting \(waitSeconds) seconds before retry...")
-                
-                // Wait the specified time
-                try? await Task.sleep(nanoseconds: UInt64(waitSeconds) * 1_000_000_000)
-                
-                print("🔄 Retrying fetch after rate limit wait...")
-                // Retry the fetch using performFetch to avoid cache check
-                await performFetch(config: config)
-                return
+                if retryCount < maxRetries {
+                    print("⏳ Rate limit hit - waiting \(waitSeconds) seconds before retry (attempt \(retryCount + 1)/\(maxRetries + 1))...")
+
+                    // Wait the specified time
+                    try? await Task.sleep(nanoseconds: UInt64(waitSeconds) * 1_000_000_000)
+
+                    print("🔄 Retrying fetch after rate limit wait...")
+                    await performFetch(config: config, retryCount: retryCount + 1)
+                    return
+                } else {
+                    print("❌ Rate limit retry exhausted after \(maxRetries) attempts")
+                }
             }
             
             if let apiError = error as? APIError {

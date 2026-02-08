@@ -20,6 +20,7 @@ class APICache {
     private var cache: [String: CacheEntry] = [:]
     private let cacheQueue = DispatchQueue(label: "com.enphase.apicache", attributes: .concurrent)
     private let cacheTTL: TimeInterval = 60 // 60 seconds
+    private let maxEntries = 20
     private let cacheFileURL: URL
     
     private init() {
@@ -57,14 +58,30 @@ class APICache {
     /// Store a response in cache with current timestamp
     func cacheResponse(for url: String, data: Data, statusCode: Int, headers: [String: String]) {
         cacheQueue.async(flags: .barrier) {
+            // Evict expired entries before adding new ones to prevent unbounded growth
+            let now = Date()
+            self.cache = self.cache.filter { _, entry in
+                now.timeIntervalSince(entry.timestamp) < self.cacheTTL
+            }
+
             self.cache[url] = CacheEntry(
                 data: data,
-                timestamp: Date(),
+                timestamp: now,
                 statusCode: statusCode,
                 headers: headers
             )
+
+            // If still over the cap, remove oldest entries
+            if self.cache.count > self.maxEntries {
+                let sorted = self.cache.sorted { $0.value.timestamp < $1.value.timestamp }
+                let toRemove = self.cache.count - self.maxEntries
+                for (key, _) in sorted.prefix(toRemove) {
+                    self.cache.removeValue(forKey: key)
+                }
+            }
+
             print("📦 Cache STORED for \(self.redactURL(url)) (\(data.count) bytes) - Total cached entries: \(self.cache.count)")
-            
+
             // Persist to disk
             self.saveCacheToDisk()
         }
@@ -103,23 +120,47 @@ class APICache {
     
     /// Load cache from disk
     private func loadCacheFromDisk() {
+        guard FileManager.default.fileExists(atPath: cacheFileURL.path) else {
+            print("💾 No cache file found (starting fresh)")
+            return
+        }
+
+        // Check file size before loading to prevent OOM on bloated cache files
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: cacheFileURL.path),
+           let fileSize = attrs[.size] as? Int,
+           fileSize > 5_000_000 { // 5 MB safety limit
+            print("⚠️ Cache file too large (\(fileSize) bytes) - deleting and starting fresh")
+            try? FileManager.default.removeItem(at: cacheFileURL)
+            return
+        }
+
         do {
             let data = try Data(contentsOf: cacheFileURL)
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
             cache = try decoder.decode([String: CacheEntry].self, from: data)
-            print("💾 Cache loaded from disk (\(cache.count) entries)")
-            
+            let loadedCount = cache.count
+            print("💾 Cache loaded from disk (\(loadedCount) entries)")
+
             // Clean up expired entries
             let now = Date()
             cache = cache.filter { _, entry in
                 now.timeIntervalSince(entry.timestamp) < cacheTTL
             }
+
+            // Save cleaned cache back to disk to prevent file from growing unboundedly
+            if cache.count < loadedCount {
+                saveCacheToDisk()
+                print("💾 Cleaned cache saved to disk (removed \(loadedCount - cache.count) expired entries)")
+            }
+
             if cache.count > 0 {
                 print("📦 \(cache.count) valid cached entries available")
             }
         } catch {
-            print("💾 No cache file found or failed to load (starting fresh)")
+            print("💾 Failed to load cache - deleting corrupt file and starting fresh")
+            try? FileManager.default.removeItem(at: cacheFileURL)
+            cache = [:]
         }
     }
     
