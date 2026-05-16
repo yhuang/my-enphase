@@ -71,13 +71,13 @@ struct SystemCardView: View {
             // Metrics
             VStack(spacing: 3) {
                 SystemMetricRow(
-                    label: "Import",
+                    label: "Imported",
                     value: system.gridImportToday,
                     color: .pink
                 )
-                
+
                 SystemMetricRow(
-                    label: "Export",
+                    label: "Exported",
                     value: system.gridExportToday,
                     color: .cyan
                 )

@@ -39,7 +39,19 @@ struct CombinedReportView: View {
                     value: metrics.consumptionToday,
                     color: .orange
                 )
-                
+
+                MetricRow(
+                    label: "Imported:",
+                    value: metrics.gridImportToday,
+                    color: .pink
+                )
+
+                MetricRow(
+                    label: "Exported:",
+                    value: metrics.gridExportToday,
+                    color: .cyan
+                )
+
                 NetFlowRow(
                     label: "Net Flow:",
                     value: metrics.netImportToday
