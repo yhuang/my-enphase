@@ -113,15 +113,17 @@ struct SystemCardView: View {
                     value: system.batteryChargedToday,
                     color: Color(hex: "7acf38"),
                     icon: "battery.100percent.bolt",
-                    iconColor: Color(hex: "7acf38")
+                    iconColor: Color(hex: "7acf38"),
+                    iconVerticalScale: 1.50
                 )
-                
+
                 SystemMetricRow(
                     label: "Discharged",
                     value: system.batteryDischargedToday,
                     color: Color(hex: "7acf38"),
                     icon: "battery.0percent",
-                    iconColor: Color(hex: "7acf38")
+                    iconColor: Color(hex: "7acf38"),
+                    iconVerticalScale: 1.50
                 )
                 
                 // Battery SOC (only for day queries)
@@ -131,6 +133,7 @@ struct SystemCardView: View {
                             .resizable()
                             .scaledToFit()
                             .frame(width: 15, height: 15)
+                            .scaleEffect(x: 1.0, y: 1.50)
                             .foregroundColor(Color(hex: "7acf38"))
                             .frame(width: 20, alignment: .center)
 
@@ -162,6 +165,7 @@ struct SystemMetricRow: View {
     var icon: String? = nil
     var iconColor: Color? = nil
     var isCustomIcon: Bool = false
+    var iconVerticalScale: CGFloat = 1.0
 
     var body: some View {
         HStack(spacing: 0) {
@@ -179,6 +183,7 @@ struct SystemMetricRow: View {
                             .resizable()
                             .scaledToFit()
                             .frame(width: 15, height: 15)
+                            .scaleEffect(x: 1.0, y: iconVerticalScale)
                             .foregroundColor(iconColor ?? .white)
                     }
                 }
