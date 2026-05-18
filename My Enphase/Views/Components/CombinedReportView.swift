@@ -53,17 +53,17 @@ struct CombinedReportView: View {
                 MetricRow(
                     label: "Imported:",
                     value: metrics.gridImportToday,
-                    color: .pink,
+                    color: AppColors.netImport,
                     icon: "arrow.down.circle.fill",
-                    iconColor: .pink
+                    iconColor: AppColors.netImport
                 )
 
                 MetricRow(
                     label: "Exported:",
                     value: metrics.gridExportToday,
-                    color: .cyan,
+                    color: AppColors.netExport,
                     icon: "arrow.up.circle.fill",
-                    iconColor: .cyan
+                    iconColor: AppColors.netExport
                 )
             }
             .padding(.horizontal)
@@ -130,33 +130,43 @@ struct NetFlowRow: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            Image("net-flow")
-                .resizable()
-                .renderingMode(.template)
-                .scaledToFit()
-                .frame(width: 15, height: 15)
-                .foregroundColor(value >= 0 ? .pink : .cyan)
-                .frame(width: 20, alignment: .center)
+            // Inner block: tightly wraps all content so the background is end-to-end
+            HStack(spacing: 0) {
+                Image("net-flow")
+                    .resizable()
+                    .renderingMode(.template)
+                    .scaledToFit()
+                    .frame(width: 15, height: 15)
+                    .foregroundColor(value >= 0 ? AppColors.netImport : AppColors.netExport)
+                    .frame(width: 20, alignment: .center)
 
-            Text(" " + label)
-                .font(.system(size: 16, design: .monospaced))
-                .foregroundColor(.white)
-                .frame(width: 103, alignment: .leading)
-
-            Text("  ")
-                .font(.system(size: 16, design: .monospaced))
-
-            HStack(spacing: 4) {
-                Text(String(format: "%.1f kWh ", abs(value)))
+                Text(" " + label)
                     .font(.system(size: 16, design: .monospaced))
-                    .foregroundColor(value >= 0 ? .pink : .cyan)
-                
-                Image(systemName: value >= 0 ? "arrow.down.circle.fill" : "arrow.up.circle.fill")
-                    .font(.system(size: 15))
-                    .foregroundColor(value >= 0 ? .pink : .cyan)
+                    .foregroundColor(.white)
+                    .frame(width: 103, alignment: .leading)
+
+                Text("  ")
+                    .font(.system(size: 16, design: .monospaced))
+
+                HStack(spacing: 4) {
+                    Text(String(format: "%.1f kWh ", abs(value)))
+                        .font(.system(size: 16, design: .monospaced))
+                        .foregroundColor(value >= 0 ? AppColors.netImport : AppColors.netExport)
+
+                    Image(systemName: value >= 0 ? "arrow.down.circle.fill" : "arrow.up.circle.fill")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 15, height: 15)
+                        .foregroundColor(value >= 0 ? AppColors.netImport : AppColors.netExport)
+                }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 10) // 1 monospace space character each side
+            .padding(.vertical, 2)
+            .background(value >= 0 ? AppColors.netImportBackground : AppColors.netExportBackground)
+
+            Spacer()
         }
+        .padding(.leading, -10) // shift 1 monospace character left
     }
 }
 

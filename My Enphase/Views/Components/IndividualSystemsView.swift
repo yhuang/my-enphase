@@ -95,34 +95,34 @@ struct SystemCardView: View {
                 SystemMetricRow(
                     label: "Imported",
                     value: system.gridImportToday,
-                    color: .pink,
+                    color: AppColors.netImport,
                     icon: "arrow.down.circle.fill",
-                    iconColor: .pink
+                    iconColor: AppColors.netImport
                 )
 
                 SystemMetricRow(
                     label: "Exported",
                     value: system.gridExportToday,
-                    color: .cyan,
+                    color: AppColors.netExport,
                     icon: "arrow.up.circle.fill",
-                    iconColor: .cyan
+                    iconColor: AppColors.netExport
                 )
                 
                 SystemMetricRow(
                     label: "Charged",
                     value: system.batteryChargedToday,
-                    color: Color(hex: "7acf38"),
+                    color: AppColors.battery,
                     icon: "battery.100percent.bolt",
-                    iconColor: Color(hex: "7acf38"),
+                    iconColor: AppColors.battery,
                     iconVerticalScale: 1.50
                 )
 
                 SystemMetricRow(
                     label: "Discharged",
                     value: system.batteryDischargedToday,
-                    color: Color(hex: "7acf38"),
+                    color: AppColors.battery,
                     icon: "battery.0percent",
-                    iconColor: Color(hex: "7acf38"),
+                    iconColor: AppColors.battery,
                     iconVerticalScale: 1.50
                 )
                 
@@ -134,7 +134,7 @@ struct SystemCardView: View {
                             .scaledToFit()
                             .frame(width: 15, height: 15)
                             .scaleEffect(x: 1.0, y: 1.50)
-                            .foregroundColor(Color(hex: "7acf38"))
+                            .foregroundColor(AppColors.battery)
                             .frame(width: 20, alignment: .center)
 
                         Text(" Percent:")
@@ -144,7 +144,7 @@ struct SystemCardView: View {
 
                         Text(String(format: "%d%%", system.batterySOC))
                             .font(.system(size: 16, design: .monospaced))
-                            .foregroundColor(Color(hex: "7acf38"))
+                            .foregroundColor(AppColors.battery)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
@@ -216,7 +216,7 @@ struct SystemNetFlowRow: View {
                 .renderingMode(.template)
                 .scaledToFit()
                 .frame(width: 15, height: 15)
-                .foregroundColor(value >= 0 ? .pink : .cyan)
+                .foregroundColor(value >= 0 ? AppColors.netImport : AppColors.netExport)
                 .frame(width: 20, alignment: .center)
 
             Text(" " + label + ":")
@@ -227,11 +227,13 @@ struct SystemNetFlowRow: View {
             HStack(spacing: 4) {
                 Text(String(format: "%.1f kWh ", abs(value)))
                     .font(.system(size: 16, design: .monospaced))
-                    .foregroundColor(value >= 0 ? .pink : .cyan)
-                
+                    .foregroundColor(value >= 0 ? AppColors.netImport : AppColors.netExport)
+
                 Image(systemName: value >= 0 ? "arrow.down.circle.fill" : "arrow.up.circle.fill")
-                    .font(.system(size: 15))
-                    .foregroundColor(value >= 0 ? .pink : .cyan)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 15, height: 15)
+                    .foregroundColor(value >= 0 ? AppColors.netImport : AppColors.netExport)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
