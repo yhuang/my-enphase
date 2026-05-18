@@ -70,18 +70,11 @@ struct SystemCardView: View {
             
             // Metrics
             VStack(spacing: 3) {
-                SystemMetricRow(
-                    label: "Imported",
-                    value: system.gridImportToday,
-                    color: .pink
+                SystemNetFlowRow(
+                    label: "Net Flow",
+                    value: system.netImportedToday
                 )
 
-                SystemMetricRow(
-                    label: "Exported",
-                    value: system.gridExportToday,
-                    color: .cyan
-                )
-                
                 SystemMetricRow(
                     label: "Produced",
                     value: system.productionToday,
@@ -89,10 +82,30 @@ struct SystemCardView: View {
                     icon: "sun.max.fill",
                     iconColor: .yellow
                 )
-                
-                SystemNetFlowRow(
-                    label: "Net Grid Flow",
-                    value: system.netImportedToday
+
+                SystemMetricRow(
+                    label: "Consumed",
+                    value: system.consumptionToday,
+                    color: .orange,
+                    icon: "plug",
+                    iconColor: .orange,
+                    isCustomIcon: true
+                )
+
+                SystemMetricRow(
+                    label: "Imported",
+                    value: system.gridImportToday,
+                    color: .pink,
+                    icon: "arrow.down.circle.fill",
+                    iconColor: .pink
+                )
+
+                SystemMetricRow(
+                    label: "Exported",
+                    value: system.gridExportToday,
+                    color: .cyan,
+                    icon: "arrow.up.circle.fill",
+                    iconColor: .cyan
                 )
                 
                 SystemMetricRow(
@@ -114,30 +127,24 @@ struct SystemCardView: View {
                 // Battery SOC (only for day queries)
                 if showBatterySOC {
                     HStack(spacing: 0) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "battery.100percent")
-                                .font(.system(size: 15))
-                                .foregroundColor(Color(hex: "7acf38"))
-                            Text("Percent:")
-                                .font(.system(size: 16, design: .monospaced))
-                                .foregroundColor(.white)
-                        }
-                        .frame(width: 163, alignment: .leading)
-                        
-                        Text("  ")
-                        
+                        Image(systemName: "battery.100percent")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 15, height: 15)
+                            .foregroundColor(Color(hex: "7acf38"))
+                            .frame(width: 20, alignment: .center)
+
+                        Text(" Percent:")
+                            .font(.system(size: 16, design: .monospaced))
+                            .foregroundColor(.white)
+                            .frame(width: 143, alignment: .leading)
+
                         Text(String(format: "%d%%", system.batterySOC))
                             .font(.system(size: 16, design: .monospaced))
                             .foregroundColor(Color(hex: "7acf38"))
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
-                
-                SystemMetricRow(
-                    label: "Total Consumed",
-                    value: system.consumptionToday,
-                    color: .orange
-                )
             }
         }
         .padding(.horizontal, 14)
@@ -154,23 +161,35 @@ struct SystemMetricRow: View {
     let color: Color
     var icon: String? = nil
     var iconColor: Color? = nil
-    
+    var isCustomIcon: Bool = false
+
     var body: some View {
         HStack(spacing: 0) {
-            HStack(spacing: 4) {
+            Group {
                 if let icon = icon {
-                    Image(systemName: icon)
-                        .font(.system(size: 15))
-                        .foregroundColor(iconColor ?? .white)
+                    if isCustomIcon {
+                        Image(icon)
+                            .resizable()
+                            .renderingMode(.template)
+                            .scaledToFit()
+                            .frame(width: 15, height: 15)
+                            .foregroundColor(iconColor ?? .white)
+                    } else {
+                        Image(systemName: icon)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 15, height: 15)
+                            .foregroundColor(iconColor ?? .white)
+                    }
                 }
-                Text(label + ":")
-                    .font(.system(size: 16, design: .monospaced))
-                    .foregroundColor(.white)
             }
-            .frame(width: 163, alignment: .leading)
-            
-            Text("  ")
-            
+            .frame(width: 20, alignment: .center)
+
+            Text(" " + label + ":")
+                .font(.system(size: 16, design: .monospaced))
+                .foregroundColor(.white)
+                .frame(width: 143, alignment: .leading)
+
             Text(String(format: "%.1f kWh", value))
                 .font(.system(size: 16, design: .monospaced))
                 .foregroundColor(color)
@@ -183,16 +202,22 @@ struct SystemMetricRow: View {
 struct SystemNetFlowRow: View {
     let label: String
     let value: Double
-    
+
     var body: some View {
         HStack(spacing: 0) {
-            Text(label + ":")
+            Image("net-flow")
+                .resizable()
+                .renderingMode(.template)
+                .scaledToFit()
+                .frame(width: 15, height: 15)
+                .foregroundColor(value >= 0 ? .pink : .cyan)
+                .frame(width: 20, alignment: .center)
+
+            Text(" " + label + ":")
                 .font(.system(size: 16, design: .monospaced))
                 .foregroundColor(.white)
-                .frame(width: 163, alignment: .leading)
-            
-            Text("  ")
-            
+                .frame(width: 143, alignment: .leading)
+
             HStack(spacing: 4) {
                 Text(String(format: "%.1f kWh ", abs(value)))
                     .font(.system(size: 16, design: .monospaced))

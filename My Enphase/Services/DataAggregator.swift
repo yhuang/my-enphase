@@ -51,20 +51,26 @@ class DataAggregator: ObservableObject {
     
     /// Save report to disk (thread-safe with serialization)
     private func saveCachedReport(_ metrics: AggregatedMetrics) {
-        saveQueue.async { [weak self] in
+        // Encode on the calling thread (likely main actor) to avoid concurrency issues
+        let cached = CachedReport(metrics: metrics, timestamp: Date())
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        
+        guard let data = try? encoder.encode(cached) else {
+            DebugLogger.log("⚠️ Failed to encode report for caching")
+            return
+        }
+        
+        // Prevent saving excessively large reports to avoid unbounded disk usage
+        guard data.count < 5_000_000 else { // 5 MB safety limit
+            DebugLogger.log("⚠️ Report too large (\(data.count) bytes) - not caching to disk")
+            return
+        }
+        
+        // Now write to disk on background queue (only I/O happens here)
+        saveQueue.async { [weak self, data] in
             guard let self = self else { return }
             do {
-                let cached = CachedReport(metrics: metrics, timestamp: Date())
-                let encoder = JSONEncoder()
-                encoder.dateEncodingStrategy = .iso8601
-                let data = try encoder.encode(cached)
-                
-                // Prevent saving excessively large reports to avoid unbounded disk usage
-                guard data.count < 5_000_000 else { // 5 MB safety limit
-                    DebugLogger.log("⚠️ Report too large (\(data.count) bytes) - not caching to disk")
-                    return
-                }
-                
                 try data.write(to: self.cacheFileURL, options: .atomic)
                 DebugLogger.log("💾 Report saved to disk (\(data.count) bytes)")
             } catch {

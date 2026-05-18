@@ -28,33 +28,42 @@ struct CombinedReportView: View {
             
             // Metrics
             VStack(spacing: 4) {
+                NetFlowRow(
+                    label: "Net Flow:",
+                    value: metrics.netImportToday
+                )
+                
                 MetricRow(
                     label: "Produced:",
                     value: metrics.productionToday,
-                    color: .yellow
+                    color: .yellow,
+                    icon: "sun.max.fill",
+                    iconColor: .yellow
                 )
                 
                 MetricRow(
                     label: "Consumed:",
                     value: metrics.consumptionToday,
-                    color: .orange
+                    color: .orange,
+                    icon: "plug",
+                    iconColor: .orange,
+                    isCustomIcon: true
                 )
 
                 MetricRow(
                     label: "Imported:",
                     value: metrics.gridImportToday,
-                    color: .pink
+                    color: .pink,
+                    icon: "arrow.down.circle.fill",
+                    iconColor: .pink
                 )
 
                 MetricRow(
                     label: "Exported:",
                     value: metrics.gridExportToday,
-                    color: .cyan
-                )
-
-                NetFlowRow(
-                    label: "Net Flow:",
-                    value: metrics.netImportToday
+                    color: .cyan,
+                    icon: "arrow.up.circle.fill",
+                    iconColor: .cyan
                 )
             }
             .padding(.horizontal)
@@ -71,16 +80,40 @@ struct MetricRow: View {
     let label: String
     let value: Double
     let color: Color
-    
+    var icon: String? = nil
+    var iconColor: Color? = nil
+    var isCustomIcon: Bool = false
+
     var body: some View {
         HStack(spacing: 0) {
-            Text(label)
+            Group {
+                if let icon = icon {
+                    if isCustomIcon {
+                        Image(icon)
+                            .resizable()
+                            .renderingMode(.template)
+                            .scaledToFit()
+                            .frame(width: 15, height: 15)
+                            .foregroundColor(iconColor ?? .white)
+                    } else {
+                        Image(systemName: icon)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 15, height: 15)
+                            .foregroundColor(iconColor ?? .white)
+                    }
+                }
+            }
+            .frame(width: 20, alignment: .center)
+
+            Text(" " + label)
                 .font(.system(size: 16, design: .monospaced))
                 .foregroundColor(.white)
-                .frame(width: 123, alignment: .leading)
-            
+                .frame(width: 103, alignment: .leading)
+
             Text("  ")
-            
+                .font(.system(size: 16, design: .monospaced))
+
             Text(String(format: "%.1f kWh", value))
                 .font(.system(size: 16, design: .monospaced))
                 .foregroundColor(color)
@@ -93,16 +126,25 @@ struct MetricRow: View {
 struct NetFlowRow: View {
     let label: String
     let value: Double
-    
+
     var body: some View {
         HStack(spacing: 0) {
-            Text(label)
+            Image("net-flow")
+                .resizable()
+                .renderingMode(.template)
+                .scaledToFit()
+                .frame(width: 15, height: 15)
+                .foregroundColor(value >= 0 ? .pink : .cyan)
+                .frame(width: 20, alignment: .center)
+
+            Text(" " + label)
                 .font(.system(size: 16, design: .monospaced))
                 .foregroundColor(.white)
-                .frame(width: 123, alignment: .leading)
-            
+                .frame(width: 103, alignment: .leading)
+
             Text("  ")
-            
+                .font(.system(size: 16, design: .monospaced))
+
             HStack(spacing: 4) {
                 Text(String(format: "%.1f kWh ", abs(value)))
                     .font(.system(size: 16, design: .monospaced))
