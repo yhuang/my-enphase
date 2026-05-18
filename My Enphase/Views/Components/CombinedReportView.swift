@@ -67,6 +67,7 @@ struct CombinedReportView: View {
                 )
             }
             .padding(.horizontal)
+            .padding(.leading, 10)
         }
         .padding(.vertical)
         .padding(.leading, 16)

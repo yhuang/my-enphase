@@ -149,6 +149,7 @@ struct SystemCardView: View {
                     }
                 }
             }
+            .padding(.leading, 29)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
