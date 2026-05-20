@@ -15,10 +15,13 @@ class DataAggregator: ObservableObject {
     @Published var error: Error?
     @Published var metrics: AggregatedMetrics?
     @Published var lastUpdated: Date?
-    
+    @Published var isFromCache: Bool = false
+
     private let cacheTTL: TimeInterval = 60 // 60 seconds
     private let cacheFileURL: URL
     private var currentFetchTask: Task<Void, Never>?
+    private var lastAPICallTime: Date?
+    private var inMemoryCache: (metrics: AggregatedMetrics, timestamp: Date)?
     private let saveQueue = DispatchQueue(label: "com.enphase.reportcache", qos: .utility)
     
     init() {
@@ -27,21 +30,28 @@ class DataAggregator: ObservableObject {
         cacheFileURL = cacheDir.appendingPathComponent("enphase_report_cache.json")
     }
     
-    /// Load cached report from disk if still valid
+    /// Load cached report — in-memory first, disk fallback for cold starts
     private func loadCachedReport() async -> (metrics: AggregatedMetrics, timestamp: Date)? {
-        return await Task {
-            guard FileManager.default.fileExists(atPath: cacheFileURL.path) else {
+        if let cached = inMemoryCache {
+            return cached
+        }
+
+        return await Task { [weak self] in
+            guard let self else { return nil }
+            guard FileManager.default.fileExists(atPath: self.cacheFileURL.path) else {
                 DebugLogger.log("💾 No cached report file exists")
                 return nil
             }
-            
+
             do {
-                let data = try Data(contentsOf: cacheFileURL)
+                let data = try Data(contentsOf: self.cacheFileURL)
                 let decoder = JSONDecoder()
                 decoder.dateDecodingStrategy = .iso8601
-                
+
                 let cached = try decoder.decode(CachedReport.self, from: data)
-                return (cached.metrics, cached.timestamp)
+                let result = (cached.metrics, cached.timestamp)
+                self.inMemoryCache = result // warm in-memory cache from disk on cold start
+                return result
             } catch {
                 DebugLogger.log("💾 ❌ Failed to load cached report: \(error)")
                 return nil
@@ -53,6 +63,7 @@ class DataAggregator: ObservableObject {
     private func saveCachedReport(_ metrics: AggregatedMetrics) {
         // Encode on the calling thread (likely main actor) to avoid concurrency issues
         let cached = CachedReport(metrics: metrics, timestamp: Date())
+        inMemoryCache = (cached.metrics, cached.timestamp) // available immediately, before disk write completes
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         
@@ -83,7 +94,21 @@ class DataAggregator: ObservableObject {
         let metrics: AggregatedMetrics
         let timestamp: Date
     }
-    
+
+    private func isInCooldown() -> Bool {
+        guard let lastCall = lastAPICallTime else { return false }
+        return Date().timeIntervalSince(lastCall) < cacheTTL
+    }
+
+    private func waitForCooldown() async {
+        guard let lastCall = lastAPICallTime else { return }
+        let elapsed = Date().timeIntervalSince(lastCall)
+        let waitTime = cacheTTL - elapsed
+        guard waitTime > 0 else { return }
+        DebugLogger.log("⏳ No cached data available. Waiting \(String(format: "%.1f", waitTime))s for API cooldown to expire...")
+        try? await Task.sleep(nanoseconds: UInt64(waitTime) * 1_000_000_000)
+    }
+
     /// Refresh metrics - checks cache staleness first
     func refreshMetrics(config: AppConfig) async {
         DebugLogger.log("🔄 Pull-to-refresh triggered at \(Date())")
@@ -106,6 +131,15 @@ class DataAggregator: ObservableObject {
                 await MainActor.run {
                     self.metrics = cached.metrics
                     self.lastUpdated = cached.metrics.timestamp
+                    self.isFromCache = true
+                }
+                return
+            } else if isInCooldown() {
+                DebugLogger.log("📦 ⏳ Cache stale but API cooldown active - serving stale cache to avoid 429")
+                await MainActor.run {
+                    self.metrics = cached.metrics
+                    self.lastUpdated = cached.metrics.timestamp
+                    self.isFromCache = true
                 }
                 return
             } else {
@@ -114,6 +148,9 @@ class DataAggregator: ObservableObject {
             }
         } else {
             DebugLogger.log("📦 No cached data found - will fetch fresh data from API")
+            if isInCooldown() {
+                await waitForCooldown()
+            }
         }
         
         // Fetch fresh data using a detached task to prevent cancellation
@@ -138,20 +175,33 @@ class DataAggregator: ObservableObject {
                 await MainActor.run {
                     self.metrics = cached.metrics
                     self.lastUpdated = cached.metrics.timestamp
+                    self.isFromCache = true
+                }
+                return
+            } else if isInCooldown() {
+                DebugLogger.log("📦 ⏳ Cache stale but API cooldown active - serving stale cache to avoid 429")
+                await MainActor.run {
+                    self.metrics = cached.metrics
+                    self.lastUpdated = cached.metrics.timestamp
+                    self.isFromCache = true
                 }
                 return
             } else {
-                DebugLogger.log("📦 ⚠️ Data is stale (age: \(String(format: "%.1f", dataAge))s >= TTL: \(cacheTTL)s) - clearing cache")
-                try? FileManager.default.removeItem(at: cacheFileURL)
+                DebugLogger.log("📦 ⚠️ Data is stale (age: \(String(format: "%.1f", dataAge))s >= TTL: \(cacheTTL)s) - will fetch fresh data")
             }
+        } else if isInCooldown() {
+            await waitForCooldown()
         }
-        
+
         DebugLogger.log("📦 No valid cached report, fetching fresh data from API")
         await performFetch(config: config)
     }
     
     private func performFetch(config: AppConfig, retryCount: Int = 0) async {
         let maxRetries = 2
+        if retryCount == 0 {
+            lastAPICallTime = Date()
+        }
         DebugLogger.log("🔄 Fetching today's data for \(config.systems.count) systems at \(Date()) (attempt \(retryCount + 1)/\(maxRetries + 1))")
         
         await MainActor.run {
@@ -285,6 +335,7 @@ class DataAggregator: ObservableObject {
             await MainActor.run {
                 self.metrics = aggregated
                 self.lastUpdated = Date()
+                self.isFromCache = false
                 self.isLoading = false
             }
             
@@ -305,13 +356,14 @@ class DataAggregator: ObservableObject {
                     await MainActor.run {
                         self.metrics = fallbackCache.metrics
                         self.lastUpdated = fallbackCache.metrics.timestamp
+                        self.isFromCache = true
                         self.isLoading = false
                         self.error = nil
                     }
                     return
                 }
             }
-            
+
             // Check if this is a rate limit error
             if let apiError = error as? APIError,
                case .rateLimitExceeded(let waitSeconds) = apiError {
@@ -341,6 +393,7 @@ class DataAggregator: ObservableObject {
                 await MainActor.run {
                     self.metrics = fallbackCache.metrics
                     self.lastUpdated = fallbackCache.metrics.timestamp
+                    self.isFromCache = true
                     self.isLoading = false
                     self.error = nil  // Clear error since we have cached data
                 }
@@ -352,11 +405,5 @@ class DataAggregator: ObservableObject {
                 self.isLoading = false
             }
         }
-    }
-    
-    /// Clear cached report
-    func clearCache() {
-        try? FileManager.default.removeItem(at: cacheFileURL)
-        DebugLogger.log("📦 Report cache cleared from disk")
     }
 }

@@ -48,7 +48,7 @@ struct DashboardView: View {
                 } else if let metrics = aggregator.metrics {
                     ScrollView {
                         VStack(spacing: 0) {
-                            ReportStatsView(timestamp: aggregator.lastUpdated ?? Date())
+                            ReportStatsView(timestamp: aggregator.lastUpdated ?? Date(), isFromCache: aggregator.isFromCache)
                             
                             CombinedReportView(metrics: metrics)
                             

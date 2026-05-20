@@ -9,6 +9,7 @@ import SwiftUI
 
 struct ReportStatsView: View {
     let timestamp: Date
+    let isFromCache: Bool
     
     private let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -26,7 +27,7 @@ struct ReportStatsView: View {
             
             // Last Updated
             HStack(spacing: 0) {
-                Text("Updated:  ")
+                Text(isFromCache ? "Cached:    " : "Updated:  ")
                     .font(.system(size: 16, design: .monospaced))
                     .foregroundColor(.white)
                 
@@ -50,5 +51,5 @@ struct ReportStatsView: View {
 }
 
 #Preview {
-    ReportStatsView(timestamp: Date())
+    ReportStatsView(timestamp: Date(), isFromCache: false)
 }
