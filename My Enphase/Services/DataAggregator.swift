@@ -20,9 +20,13 @@ class DataAggregator: ObservableObject {
     private let cacheTTL: TimeInterval = 60 // 60 seconds
     private let cacheFileURL: URL
     private var currentFetchTask: Task<Void, Never>?
-    private var lastAPICallTime: Date?
     private var inMemoryCache: (metrics: AggregatedMetrics, timestamp: Date)?
     private let saveQueue = DispatchQueue(label: "com.enphase.reportcache", qos: .utility)
+
+    private var lastAPICallTime: Date? {
+        get { UserDefaults.standard.object(forKey: "lastAPICallTime") as? Date }
+        set { UserDefaults.standard.set(newValue, forKey: "lastAPICallTime") }
+    }
     
     init() {
         // Get cache directory
