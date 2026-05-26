@@ -1,6 +1,6 @@
 //
 //  ConfigManager.swift
-//  Enphase Monitor App
+//  My Enphase
 //
 //  Configuration management with UserDefaults persistence
 //
@@ -8,15 +8,13 @@
 import Foundation
 import Combine
 
-class ConfigManager: ObservableObject {
+final class ConfigManager: ObservableObject {
     private let configKey = "enphase_app_config"
-    
+
     @Published var config: AppConfig {
-        didSet {
-            saveConfig()
-        }
+        didSet { saveConfig() }
     }
-    
+
     init() {
         if let data = UserDefaults.standard.data(forKey: configKey),
            let decoded = try? JSONDecoder().decode(AppConfig.self, from: data) {
@@ -25,43 +23,39 @@ class ConfigManager: ObservableObject {
             self.config = .empty
         }
     }
-    
+
     private func saveConfig() {
         if let encoded = try? JSONEncoder().encode(config) {
             UserDefaults.standard.set(encoded, forKey: configKey)
         }
     }
-    
-    func isConfigured() -> Bool {
-        return !config.api.apiKey.isEmpty &&
-               !config.api.clientID.isEmpty &&
-               !config.api.clientSecret.isEmpty &&
-               !config.api.refreshToken.isEmpty &&
-               !config.systems.isEmpty
+
+    var isConfigured: Bool {
+        !config.api.apiKey.isEmpty &&
+        !config.api.clientID.isEmpty &&
+        !config.api.clientSecret.isEmpty &&
+        !config.api.refreshToken.isEmpty &&
+        !config.systems.isEmpty
     }
-    
-    func updateAPIConfig(
-        apiKey: String,
-        clientID: String,
-        clientSecret: String,
-        refreshToken: String
-    ) {
-        config.api.apiKey = apiKey
-        config.api.clientID = clientID
-        config.api.clientSecret = clientSecret
-        config.api.refreshToken = refreshToken
+
+    // Assigns all four fields in a single write so didSet fires once.
+    func updateAPIConfig(apiKey: String, clientID: String, clientSecret: String, refreshToken: String) {
+        var updated = config
+        updated.api.apiKey = apiKey
+        updated.api.clientID = clientID
+        updated.api.clientSecret = clientSecret
+        updated.api.refreshToken = refreshToken
+        config = updated
     }
-    
+
     func addSystem(id: String, name: String) {
-        let newSystem = SystemConfig(id: id, name: name)
-        config.systems.append(newSystem)
+        config.systems.append(SystemConfig(id: id, name: name))
     }
-    
-    func removeSystem(at index: Int) {
-        guard index < config.systems.count else { return }
-        config.systems.remove(at: index)
+
+    func removeSystem(id: String) {
+        config.systems.removeAll { $0.id == id }
     }
-    
+
     func clearConfig() {
         config = .empty
     }

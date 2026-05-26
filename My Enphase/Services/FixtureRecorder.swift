@@ -6,24 +6,31 @@ import Foundation
 // Copy that folder into My Enphase Tests/test-data/ to activate integration tests.
 struct FixtureRecorder {
 
+    private static let isoFormatter = ISO8601DateFormatter()
+
     static func record(config: AppConfig, metrics: SiteMetrics) {
-        let dateStr = String(ISO8601DateFormatter().string(from: metrics.timestamp).prefix(10))
+        let dateStr = String(isoFormatter.string(from: metrics.timestamp).prefix(10))
 
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let destDir = documents.appendingPathComponent("test-data/\(dateStr)")
 
-        do {
-            try FileManager.default.createDirectory(at: destDir, withIntermediateDirectories: true)
-        } catch {
-            DebugLogger.log("❌ FixtureRecorder: could not create directory — \(error)")
-            return
+        Task.detached {
+            do {
+                try FileManager.default.createDirectory(at: destDir, withIntermediateDirectories: true)
+            } catch {
+                DebugLogger.log("❌ FixtureRecorder: could not create directory — \(error)")
+                return
+            }
+
+            extractAPIFixtures(config: config, to: destDir)
+            writeExpectedValues(metrics: metrics, date: dateStr, to: destDir)
+
+            let path = destDir.path
+            DebugLogger.log("✅ FixtureRecorder: fixtures saved to \(path)")
+            // Print unconditionally so the path appears in Xcode's console regardless of
+            // whether debug logging is routed elsewhere.
+            print("📂 Test fixtures exported to:\n\(path)")
         }
-
-        extractAPIFixtures(config: config, to: destDir)
-        writeExpectedValues(metrics: metrics, config: config, date: dateStr, to: destDir)
-
-        DebugLogger.log("✅ FixtureRecorder: fixtures saved to \(destDir.path)")
-        print("📂 Test fixtures exported to:\n\(destDir.path)")
     }
 
     // MARK: - Private
@@ -56,7 +63,7 @@ struct FixtureRecorder {
                     continue
                 }
 
-                // The Cache serialises Data as base64; decode it to get the raw JSON bytes.
+                // Cache serialises Data as base64; decode it to recover the raw JSON bytes.
                 guard let base64 = entry["data"] as? String,
                       let responseData = Data(base64Encoded: base64)
                 else {
@@ -66,7 +73,6 @@ struct FixtureRecorder {
 
                 let dest = destDir.appendingPathComponent("\(ep.name)_\(system.id).json")
                 do {
-                    // Pretty-print for readability
                     if let obj = try? JSONSerialization.jsonObject(with: responseData),
                        let pretty = try? JSONSerialization.data(withJSONObject: obj, options: .prettyPrinted) {
                         try pretty.write(to: dest)
@@ -81,35 +87,85 @@ struct FixtureRecorder {
         }
     }
 
-    private static func writeExpectedValues(metrics: SiteMetrics, config: AppConfig, date: String, to destDir: URL) {
-        var systemValues: [[String: Any]] = []
-        for system in metrics.systems {
-            systemValues.append([
-                "id":                       system.id,
-                "production_today":         system.productionToday,
-                "consumption_today":        system.consumptionToday,
-                "battery_soc":              system.batterySOC,
-                "grid_import_today":        system.gridImportToday,
-                "grid_export_today":        system.gridExportToday,
-                "battery_charged_today":    system.batteryChargedToday,
-                "battery_discharged_today": system.batteryDischargedToday,
-                "net_flow_today":           system.netFlowToday,
-            ])
+    // MARK: - Expected values (typed Codable structs keep format in sync with TestHelpers)
+
+    private struct ExpectedValues: Encodable {
+        let date: String
+        let site: ExpectedSiteValues
+        let systems: [ExpectedSystemValues]
+    }
+
+    private struct ExpectedSiteValues: Encodable {
+        let productionToday: Double
+        let consumptionToday: Double
+        let gridImportToday: Double
+        let gridExportToday: Double
+        let netFlowToday: Double
+
+        enum CodingKeys: String, CodingKey {
+            case productionToday  = "production_today"
+            case consumptionToday = "consumption_today"
+            case gridImportToday  = "grid_import_today"
+            case gridExportToday  = "grid_export_today"
+            case netFlowToday     = "net_flow_today"
+        }
+    }
+
+    private struct ExpectedSystemValues: Encodable {
+        let id: String
+        let productionToday: Double
+        let consumptionToday: Double
+        let batterySOC: Int
+        let gridImportToday: Double
+        let gridExportToday: Double
+        let batteryChargedToday: Double
+        let batteryDischargedToday: Double
+        let netFlowToday: Double
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case productionToday        = "production_today"
+            case consumptionToday       = "consumption_today"
+            case batterySOC             = "battery_soc"
+            case gridImportToday        = "grid_import_today"
+            case gridExportToday        = "grid_export_today"
+            case batteryChargedToday    = "battery_charged_today"
+            case batteryDischargedToday = "battery_discharged_today"
+            case netFlowToday           = "net_flow_today"
+        }
+    }
+
+    private static func writeExpectedValues(metrics: SiteMetrics, date: String, to destDir: URL) {
+        let systemValues = metrics.systems.map { system in
+            ExpectedSystemValues(
+                id: system.id,
+                productionToday: system.productionToday,
+                consumptionToday: system.consumptionToday,
+                batterySOC: system.batterySOC ?? 0,
+                gridImportToday: system.gridImportToday ?? 0,
+                gridExportToday: system.gridExportToday ?? 0,
+                batteryChargedToday: system.batteryChargedToday ?? 0,
+                batteryDischargedToday: system.batteryDischargedToday ?? 0,
+                netFlowToday: system.netFlowToday ?? 0
+            )
         }
 
-        let payload: [String: Any] = [
-            "date": date,
-            "site": [
-                "production_today":  metrics.productionToday,
-                "consumption_today": metrics.consumptionToday,
-                "grid_import_today": metrics.gridImportToday,
-                "grid_export_today": metrics.gridExportToday,
-                "net_flow_today":    metrics.netFlowToday,
-            ],
-            "systems": systemValues,
-        ]
+        let payload = ExpectedValues(
+            date: date,
+            site: ExpectedSiteValues(
+                productionToday: metrics.productionToday,
+                consumptionToday: metrics.consumptionToday,
+                gridImportToday: metrics.gridImportToday ?? 0,
+                gridExportToday: metrics.gridExportToday ?? 0,
+                netFlowToday: metrics.netFlowToday ?? 0
+            ),
+            systems: systemValues
+        )
 
-        guard let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]) else {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+
+        guard let data = try? encoder.encode(payload) else {
             DebugLogger.log("❌ FixtureRecorder: could not encode expected_values")
             return
         }

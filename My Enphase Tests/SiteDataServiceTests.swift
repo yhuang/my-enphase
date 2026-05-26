@@ -12,12 +12,6 @@ import XCTest
 //   4. Re-run tests — they will validate against the recorded golden values.
 
 final class SiteDataServiceTests: XCTestCase {
-    var client: EnphaseAPIClient!
-
-    override func setUp() {
-        super.setUp()
-        client = EnphaseAPIClient()
-    }
 
     func testSiteMetricsMatchExpectedValues() throws {
         let (expected, fixtures) = try loadFixtureDate()
@@ -29,12 +23,12 @@ final class SiteDataServiceTests: XCTestCase {
             let gridImport  = try loadNestedIntervals  (fixtures: fixtures, endpoint: "grid_import", systemID: system.id)
             let gridExport  = try loadNestedIntervals  (fixtures: fixtures, endpoint: "grid_export", systemID: system.id)
 
-            let productionTotal  = client.calculateDailyTotal(from: production.intervals,  field: \.whDel)
-            let consumptionTotal = client.calculateDailyTotal(from: consumption.intervals, field: \.enwh)
-            let gridImportTotal  = client.calculateDailyTotalFromNested(from: gridImport,  field: \.whImported)
-            let gridExportTotal  = client.calculateDailyTotalFromNested(from: gridExport,  field: \.whExported)
-            let batteryCharged   = client.calculateBatteryCharged(from: battery.intervals)
-            let batteryDischarged = client.calculateBatteryDischarged(from: battery.intervals)
+            let productionTotal  = EnphaseAPIClient.calculateDailyTotal(from: production.intervals,  field: \.whDel)
+            let consumptionTotal = EnphaseAPIClient.calculateDailyTotal(from: consumption.intervals, field: \.enwh)
+            let gridImportTotal  = EnphaseAPIClient.calculateDailyTotalFromNested(from: gridImport,  field: \.whImported)
+            let gridExportTotal  = EnphaseAPIClient.calculateDailyTotalFromNested(from: gridExport,  field: \.whExported)
+            let batteryCharged   = EnphaseAPIClient.calculateBatteryCharged(from: battery.intervals)
+            let batteryDischarged = EnphaseAPIClient.calculateBatteryDischarged(from: battery.intervals)
             let netFlow          = gridImportTotal - gridExportTotal
 
             assertMetric(productionTotal,   matches: system.productionToday,      label: "[\(system.id)] Production")
@@ -61,10 +55,10 @@ final class SiteDataServiceTests: XCTestCase {
             let gridImport  = try loadNestedIntervals  (fixtures: fixtures, endpoint: "grid_import", systemID: system.id)
             let gridExport  = try loadNestedIntervals  (fixtures: fixtures, endpoint: "grid_export", systemID: system.id)
 
-            totalProduction  += client.calculateDailyTotal(from: production.intervals,  field: \.whDel)
-            totalConsumption += client.calculateDailyTotal(from: consumption.intervals, field: \.enwh)
-            totalGridImport  += client.calculateDailyTotalFromNested(from: gridImport,  field: \.whImported)
-            totalGridExport  += client.calculateDailyTotalFromNested(from: gridExport,  field: \.whExported)
+            totalProduction  += EnphaseAPIClient.calculateDailyTotal(from: production.intervals,  field: \.whDel)
+            totalConsumption += EnphaseAPIClient.calculateDailyTotal(from: consumption.intervals, field: \.enwh)
+            totalGridImport  += EnphaseAPIClient.calculateDailyTotalFromNested(from: gridImport,  field: \.whImported)
+            totalGridExport  += EnphaseAPIClient.calculateDailyTotalFromNested(from: gridExport,  field: \.whExported)
         }
 
         let site = expected.site
