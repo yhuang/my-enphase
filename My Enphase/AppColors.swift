@@ -36,13 +36,13 @@ extension Color {
 
 // MARK: - App palette
 enum AppColors {
-    // Energy flow — import (grid in)
-    static let netImport           = Color(hex: "FF50B1")
-    static let netImportBackground = Color(hex: "010364")
+    // Grid Import (energy drawn from the utility grid)
+    static let gridImport           = Color(hex: "FF50B1")
+    static let gridImportBackground = Color(hex: "010364")
 
-    // Energy flow — export (grid out)
-    static let netExport           = Color(hex: "00DBD9")
-    static let netExportBackground = Color(hex: "720066")
+    // Grid Export (energy pushed to the utility grid)
+    static let gridExport           = Color(hex: "00DBD9")
+    static let gridExportBackground = Color(hex: "720066")
 
     // Individual metric categories
     static let production  = Color.yellow

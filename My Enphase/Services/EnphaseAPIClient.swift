@@ -396,11 +396,11 @@ class EnphaseAPIClient: ObservableObject {
         
         let endpoint = "systems/\(systemID)/energy_import_telemetry?start_at=\(startTimestamp)&end_at=\(endTimestamp)"
         
-        struct ImportResponse: Codable {
+        struct GridImportResponse: Codable {
             let intervals: [[TelemetryInterval]]
         }
         
-        let response: ImportResponse = try await makeRequest(endpoint: endpoint, accessToken: accessToken, apiKey: config.apiKey)
+        let response: GridImportResponse = try await makeRequest(endpoint: endpoint, accessToken: accessToken, apiKey: config.apiKey)
         DebugLogger.log("📊 Grid Import Response: \(response.intervals.count) nested arrays, total intervals: \(response.intervals.flatMap { $0 }.count)")
         return response.intervals
     }
@@ -421,11 +421,11 @@ class EnphaseAPIClient: ObservableObject {
         
         let endpoint = "systems/\(systemID)/energy_export_telemetry?start_at=\(startTimestamp)&end_at=\(endTimestamp)"
         
-        struct ExportResponse: Codable {
+        struct GridExportResponse: Codable {
             let intervals: [[TelemetryInterval]]
         }
         
-        let response: ExportResponse = try await makeRequest(endpoint: endpoint, accessToken: accessToken, apiKey: config.apiKey)
+        let response: GridExportResponse = try await makeRequest(endpoint: endpoint, accessToken: accessToken, apiKey: config.apiKey)
         DebugLogger.log("📊 Grid Export Response: \(response.intervals.count) nested arrays, total intervals: \(response.intervals.flatMap { $0 }.count)")
         return response.intervals
     }

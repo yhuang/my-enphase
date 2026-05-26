@@ -50,13 +50,13 @@ struct DashboardView: View {
                         VStack(spacing: 0) {
                             ReportStatsView(timestamp: siteDataService.lastUpdated ?? Date(), isFromCache: siteDataService.isFromCache)
                             
-                            CombinedReportView(metrics: metrics)
+                            SiteReportView(metrics: metrics)
                             
                             Spacer()
                                 .frame(height: 24)
                             
                             if metrics.systems.count > 1 {
-                                IndividualSystemsView(systems: metrics.systems)
+                                SystemsReportView(systems: metrics.systems)
                             }
                         }
                     }

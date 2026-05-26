@@ -1,13 +1,13 @@
 //
-//  CombinedReportView.swift
+//  SiteReportView.swift
 //  Enphase Monitor App
 //
-//  Combined energy report component
+//  Site-level energy report component
 //
 
 import SwiftUI
 
-struct CombinedReportView: View {
+struct SiteReportView: View {
     let metrics: SiteMetrics
     
     var body: some View {
@@ -53,17 +53,17 @@ struct CombinedReportView: View {
                 MetricRow(
                     label: "Imported:",
                     value: metrics.gridImportToday,
-                    color: AppColors.netImport,
+                    color: AppColors.gridImport,
                     icon: "arrow.down.circle.fill",
-                    iconColor: AppColors.netImport
+                    iconColor: AppColors.gridImport
                 )
 
                 MetricRow(
                     label: "Exported:",
                     value: metrics.gridExportToday,
-                    color: AppColors.netExport,
+                    color: AppColors.gridExport,
                     icon: "arrow.up.circle.fill",
-                    iconColor: AppColors.netExport
+                    iconColor: AppColors.gridExport
                 )
             }
             .padding(.horizontal)
@@ -137,7 +137,7 @@ struct NetFlowRow: View {
                     .renderingMode(.template)
                     .scaledToFit()
                     .frame(width: 15, height: 15)
-                    .foregroundColor(value >= 0 ? AppColors.netImport : AppColors.netExport)
+                    .foregroundColor(value >= 0 ? AppColors.gridImport : AppColors.gridExport)
                     .frame(width: 20, alignment: .center)
 
                 Text(" " + label)
@@ -151,18 +151,18 @@ struct NetFlowRow: View {
                 HStack(spacing: 4) {
                     Text(String(format: "%.1f kWh ", abs(value)))
                         .font(.system(size: 16, design: .monospaced))
-                        .foregroundColor(value >= 0 ? AppColors.netImport : AppColors.netExport)
+                        .foregroundColor(value >= 0 ? AppColors.gridImport : AppColors.gridExport)
 
                     Image(systemName: value >= 0 ? "arrow.down.circle.fill" : "arrow.up.circle.fill")
                         .resizable()
                         .scaledToFit()
                         .frame(width: 15, height: 15)
-                        .foregroundColor(value >= 0 ? AppColors.netImport : AppColors.netExport)
+                        .foregroundColor(value >= 0 ? AppColors.gridImport : AppColors.gridExport)
                 }
             }
             .padding(.horizontal, 10) // 1 monospace space character each side
             .padding(.vertical, 2)
-            .background(value >= 0 ? AppColors.netImportBackground : AppColors.netExportBackground)
+            .background(value >= 0 ? AppColors.gridImportBackground : AppColors.gridExportBackground)
 
             Spacer()
         }
@@ -171,7 +171,7 @@ struct NetFlowRow: View {
 }
 
 #Preview {
-    CombinedReportView(
+    SiteReportView(
         metrics: SiteMetrics(
             timestamp: Date(),
             productionToday: 33.4,

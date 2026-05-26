@@ -1,13 +1,13 @@
 //
-//  IndividualSystemsView.swift
+//  SystemsReportView.swift
 //  Enphase Monitor App
 //
-//  Individual systems report component
+//  Per-system energy report component
 //
 
 import SwiftUI
 
-struct IndividualSystemsView: View {
+struct SystemsReportView: View {
     let systems: [SystemMetrics]
 
     var body: some View {
@@ -92,17 +92,17 @@ struct SystemCardView: View {
                 SystemMetricRow(
                     label: "Imported",
                     value: system.gridImportToday,
-                    color: AppColors.netImport,
+                    color: AppColors.gridImport,
                     icon: "arrow.down.circle.fill",
-                    iconColor: AppColors.netImport
+                    iconColor: AppColors.gridImport
                 )
 
                 SystemMetricRow(
                     label: "Exported",
                     value: system.gridExportToday,
-                    color: AppColors.netExport,
+                    color: AppColors.gridExport,
                     icon: "arrow.up.circle.fill",
-                    iconColor: AppColors.netExport
+                    iconColor: AppColors.gridExport
                 )
                 
                 SystemMetricRow(
@@ -210,7 +210,7 @@ struct SystemNetFlowRow: View {
                 .renderingMode(.template)
                 .scaledToFit()
                 .frame(width: 15, height: 15)
-                .foregroundColor(value >= 0 ? AppColors.netImport : AppColors.netExport)
+                .foregroundColor(value >= 0 ? AppColors.gridImport : AppColors.gridExport)
                 .frame(width: 20, alignment: .center)
 
             Text(" " + label + ":")
@@ -221,13 +221,13 @@ struct SystemNetFlowRow: View {
             HStack(spacing: 4) {
                 Text(String(format: "%.1f kWh ", abs(value)))
                     .font(.system(size: 16, design: .monospaced))
-                    .foregroundColor(value >= 0 ? AppColors.netImport : AppColors.netExport)
+                    .foregroundColor(value >= 0 ? AppColors.gridImport : AppColors.gridExport)
 
                 Image(systemName: value >= 0 ? "arrow.down.circle.fill" : "arrow.up.circle.fill")
                     .resizable()
                     .scaledToFit()
                     .frame(width: 15, height: 15)
-                    .foregroundColor(value >= 0 ? AppColors.netImport : AppColors.netExport)
+                    .foregroundColor(value >= 0 ? AppColors.gridImport : AppColors.gridExport)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -235,7 +235,7 @@ struct SystemNetFlowRow: View {
 }
 
 #Preview {
-    IndividualSystemsView(
+    SystemsReportView(
         systems: [
             SystemMetrics(
                 id: "5525881",
