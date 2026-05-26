@@ -1,6 +1,6 @@
 //
 //  AppColors.swift
-//  Enphase Monitor App
+//  My Enphase
 //
 //  Centralised color palette for the entire app.
 //
@@ -22,6 +22,7 @@ extension Color {
         case 8: // ARGB (32-bit)
             (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
         default:
+            assertionFailure("Invalid hex color string: '\(hex)' — must be 3, 6, or 8 hex digits")
             (a, r, g, b) = (255, 0, 0, 0)
         }
         self.init(

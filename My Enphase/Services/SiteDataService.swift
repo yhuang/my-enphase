@@ -1,6 +1,6 @@
 //
 //  SiteDataService.swift
-//  Enphase Monitor App
+//  My Enphase
 //
 //  Fetches today's Interval Data for each System at the Site, aggregates per-System
 //  totals into SiteMetrics, and manages the Cache and API Budget cooldown.
@@ -9,405 +9,334 @@
 import Foundation
 import Combine
 
-class SiteDataService: ObservableObject {
+// Shared cooldown window: matches the HTTP cache TTL in Cache.swift.
+// Changing one without the other would allow stale-but-fresh-looking data.
+let apiCooldownTTL: TimeInterval = 60
+
+@MainActor
+final class SiteDataService: ObservableObject {
     private let apiClient = EnphaseAPIClient()
-    
+
     @Published var isLoading = false
     @Published var error: Error?
     @Published var metrics: SiteMetrics?
     @Published var lastUpdated: Date?
-    @Published var isFromCache: Bool = false
+    @Published var isFromCache = false
 
-    private let cacheTTL: TimeInterval = 60 // 60 seconds
     private let cacheFileURL: URL
     private var currentFetchTask: Task<Void, Never>?
     private var inMemoryCache: (metrics: SiteMetrics, timestamp: Date)?
-    private let saveQueue = DispatchQueue(label: "com.enphase.reportcache", qos: .utility)
+
+    // Persisted across cold starts so the API Budget cooldown survives app restarts.
+    private var lastAPICallTimestamp: Double {
+        get { UserDefaults.standard.double(forKey: "lastAPICallTimestamp") }
+        set { UserDefaults.standard.set(newValue, forKey: "lastAPICallTimestamp") }
+    }
 
     private var lastAPICallTime: Date? {
-        get { UserDefaults.standard.object(forKey: "lastAPICallTime") as? Date }
-        set { UserDefaults.standard.set(newValue, forKey: "lastAPICallTime") }
+        let t = lastAPICallTimestamp
+        return t > 0 ? Date(timeIntervalSinceReferenceDate: t) : nil
     }
-    
+
     init() {
-        // Get cache directory
         let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         cacheFileURL = cacheDir.appendingPathComponent("enphase_report_cache.json")
     }
-    
-    /// Load cached report — in-memory first, disk fallback for cold starts
-    private func loadCachedReport() async -> (metrics: SiteMetrics, timestamp: Date)? {
-        if let cached = inMemoryCache {
-            return cached
-        }
 
-        return await Task { [weak self] in
-            guard let self else { return nil }
-            guard FileManager.default.fileExists(atPath: self.cacheFileURL.path) else {
+    // MARK: - Cache
+
+    func clearReportCache() {
+        inMemoryCache = nil
+        let url = cacheFileURL
+        Task.detached {
+            try? FileManager.default.removeItem(at: url)
+        }
+        DebugLogger.log("💾 Report cache cleared")
+    }
+
+    private func loadCachedReport() async -> (metrics: SiteMetrics, timestamp: Date)? {
+        if let cached = inMemoryCache { return cached }
+
+        return await Task.detached { [cacheFileURL] () -> (SiteMetrics, Date)? in
+            guard FileManager.default.fileExists(atPath: cacheFileURL.path) else {
                 DebugLogger.log("💾 No cached report file exists")
                 return nil
             }
-
             do {
-                let data = try Data(contentsOf: self.cacheFileURL)
+                let data = try Data(contentsOf: cacheFileURL)
                 let decoder = JSONDecoder()
                 decoder.dateDecodingStrategy = .iso8601
-
                 let cached = try decoder.decode(CachedReport.self, from: data)
-                let result = (cached.metrics, cached.timestamp)
-                self.inMemoryCache = result // warm in-memory cache from disk on cold start
-                return result
+                return (cached.metrics, cached.timestamp)
             } catch {
                 DebugLogger.log("💾 ❌ Failed to load cached report: \(error)")
                 return nil
             }
-        }.value
+        }.value.map { result in
+            inMemoryCache = result
+            return result
+        }
     }
-    
-    /// Save report to disk (thread-safe with serialization)
+
     private func saveCachedReport(_ metrics: SiteMetrics) {
-        // Encode on the calling thread (likely main actor) to avoid concurrency issues
         let cached = CachedReport(metrics: metrics, timestamp: Date())
-        inMemoryCache = (cached.metrics, cached.timestamp) // available immediately, before disk write completes
+        inMemoryCache = (cached.metrics, cached.timestamp)
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        
         guard let data = try? encoder.encode(cached) else {
             DebugLogger.log("⚠️ Failed to encode report for caching")
             return
         }
-        
-        // Prevent saving excessively large reports to avoid unbounded disk usage
-        guard data.count < 5_000_000 else { // 5 MB safety limit
-            DebugLogger.log("⚠️ Report too large (\(data.count) bytes) - not caching to disk")
+        guard data.count < reportCacheMaxBytes else {
+            DebugLogger.log("⚠️ Report too large (\(data.count) bytes) — not caching to disk")
             return
         }
-        
-        // Now write to disk on background queue (only I/O happens here)
-        saveQueue.async { [weak self, data] in
-            guard let self = self else { return }
+        let url = cacheFileURL
+        Task.detached {
             do {
-                try data.write(to: self.cacheFileURL, options: .atomic)
+                try data.write(to: url, options: .atomic)
                 DebugLogger.log("💾 Report saved to disk (\(data.count) bytes)")
             } catch {
                 DebugLogger.log("⚠️ Failed to save report to disk: \(error)")
             }
         }
     }
-    
-    private struct CachedReport: Codable, @unchecked Sendable {
+
+    // 5 MB — shared threshold with Cache.swift's disk guard.
+    private let reportCacheMaxBytes = 5_000_000
+
+    private struct CachedReport: Codable {
         let metrics: SiteMetrics
         let timestamp: Date
     }
 
+    // MARK: - Cooldown
+
     private func isInCooldown() -> Bool {
         guard let lastCall = lastAPICallTime else { return false }
-        return Date().timeIntervalSince(lastCall) < cacheTTL
+        return Date().timeIntervalSince(lastCall) < apiCooldownTTL
     }
 
-    private func waitForCooldown() async {
+    private func waitForCooldown() async throws {
         guard let lastCall = lastAPICallTime else { return }
-        let elapsed = Date().timeIntervalSince(lastCall)
-        let waitTime = cacheTTL - elapsed
+        let waitTime = apiCooldownTTL - Date().timeIntervalSince(lastCall)
         guard waitTime > 0 else { return }
-        DebugLogger.log("⏳ No cached data available. Waiting \(String(format: "%.1f", waitTime))s for API cooldown to expire...")
-        try? await Task.sleep(nanoseconds: UInt64(waitTime) * 1_000_000_000)
+        DebugLogger.log("⏳ No cached data available. Waiting \(String(format: "%.1f", waitTime))s for API Budget cooldown...")
+        // Propagates CancellationError so the caller can exit cleanly.
+        try await Task.sleep(nanoseconds: UInt64(waitTime * 1_000_000_000))
     }
 
-    /// Refresh metrics - checks cache staleness first
+    // MARK: - Public fetch interface
+
+    /// Initial load: serve fresh cache immediately; wait out cooldown if no cache exists.
+    func fetchMetrics(config: AppConfig) async {
+        await _fetchMetrics(config: config, cancelPrevious: false)
+    }
+
+    /// Pull-to-refresh: cancel any in-flight fetch; serve stale cache if budget exhausted.
     func refreshMetrics(config: AppConfig) async {
-        DebugLogger.log("🔄 Pull-to-refresh triggered at \(Date())")
-        
-        // Cancel any existing fetch task and wait for it to complete
-        if let existingTask = currentFetchTask {
-            DebugLogger.log("⚠️ Cancelling previous fetch task")
-            existingTask.cancel()
-            await existingTask.value
+        await _fetchMetrics(config: config, cancelPrevious: true)
+    }
+
+    private func _fetchMetrics(config: AppConfig, cancelPrevious: Bool) async {
+        DebugLogger.log("🔄 fetchMetrics(cancelPrevious: \(cancelPrevious)) at \(Date())")
+
+        if cancelPrevious {
+            currentFetchTask?.cancel()
+            await currentFetchTask?.value
             currentFetchTask = nil
         }
-        
-        // Check if cached data is still fresh
+
         if let cached = await loadCachedReport() {
             let dataAge = Date().timeIntervalSince(cached.metrics.timestamp)
-            DebugLogger.log("📦 Found cached data with age: \(String(format: "%.1f", dataAge))s (TTL: \(cacheTTL)s)")
-            
-            if dataAge < cacheTTL {
-                DebugLogger.log("📦 ✅ Cache is still fresh - serving cached data without API call")
-                await MainActor.run {
-                    self.metrics = cached.metrics
-                    self.lastUpdated = cached.metrics.timestamp
-                    self.isFromCache = true
-                }
+            DebugLogger.log("📦 Found cached data, age: \(String(format: "%.1f", dataAge))s (TTL: \(apiCooldownTTL)s)")
+
+            if dataAge < apiCooldownTTL {
+                DebugLogger.log("📦 ✅ Cache is fresh — serving without API call")
+                metrics = cached.metrics
+                lastUpdated = cached.metrics.timestamp
+                isFromCache = true
                 return
             } else if isInCooldown() {
-                DebugLogger.log("📦 ⏳ Cache stale but API cooldown active - serving stale cache to avoid 429")
-                await MainActor.run {
-                    self.metrics = cached.metrics
-                    self.lastUpdated = cached.metrics.timestamp
-                    self.isFromCache = true
-                }
+                DebugLogger.log("📦 ⏳ Cache stale but API Budget exhausted — serving stale cache")
+                metrics = cached.metrics
+                lastUpdated = cached.metrics.timestamp
+                isFromCache = true
                 return
             } else {
-                DebugLogger.log("📦 ❌ Cache is STALE - will fetch fresh data from API")
-                DebugLogger.log("   Data age: \(String(format: "%.1f", dataAge))s >= TTL: \(cacheTTL)s)")
-            }
-        } else {
-            DebugLogger.log("📦 No cached data found - will fetch fresh data from API")
-            if isInCooldown() {
-                await waitForCooldown()
-            }
-        }
-        
-        // Fetch fresh data using a detached task to prevent cancellation
-        DebugLogger.log("🔄 Starting performFetch in detached task...")
-        currentFetchTask = Task.detached { [weak self] in
-            guard let self = self else { return }
-            await self.performFetch(config: config)
-        }
-        await currentFetchTask?.value
-        currentFetchTask = nil  // Clear task reference to prevent memory leak
-        DebugLogger.log("🔄 performFetch completed")
-    }
-    
-    func fetchMetrics(config: AppConfig) async {
-        // Check if we have cached data first
-        if let cached = await loadCachedReport() {
-            let dataAge = Date().timeIntervalSince(cached.metrics.timestamp)
-            
-            // Check if the actual data timestamp is fresh enough
-            if dataAge < cacheTTL {
-                DebugLogger.log("📦 ✅ Data is fresh (age: \(String(format: "%.1f", dataAge))s < TTL: \(cacheTTL)s) - NO API CALLS")
-                await MainActor.run {
-                    self.metrics = cached.metrics
-                    self.lastUpdated = cached.metrics.timestamp
-                    self.isFromCache = true
-                }
-                return
-            } else if isInCooldown() {
-                DebugLogger.log("📦 ⏳ Cache stale but API cooldown active - serving stale cache to avoid 429")
-                await MainActor.run {
-                    self.metrics = cached.metrics
-                    self.lastUpdated = cached.metrics.timestamp
-                    self.isFromCache = true
-                }
-                return
-            } else {
-                DebugLogger.log("📦 ⚠️ Data is stale (age: \(String(format: "%.1f", dataAge))s >= TTL: \(cacheTTL)s) - will fetch fresh data")
+                DebugLogger.log("📦 ❌ Cache stale — fetching fresh data")
             }
         } else if isInCooldown() {
-            await waitForCooldown()
-        }
-
-        DebugLogger.log("📦 No valid cached report, fetching fresh data from API")
-        await performFetch(config: config)
-    }
-    
-    private func performFetch(config: AppConfig, retryCount: Int = 0) async {
-        let maxRetries = 2
-        if retryCount == 0 {
-            lastAPICallTime = Date()
-        }
-        DebugLogger.log("🔄 Fetching today's data for \(config.systems.count) systems at \(Date()) (attempt \(retryCount + 1)/\(maxRetries + 1))")
-        
-        await MainActor.run {
-            isLoading = true
-            error = nil
-        }
-        
-        do {
-            // Always fetch today's data (start of day to now)
-            let calendar = Calendar.current
-            let now = Date()
-            let startDate = calendar.startOfDay(for: now)
-            let endDate = now
-            let duration = Int(endDate.timeIntervalSince(startDate))
-            
-            DebugLogger.log("📅 Today's data: \(startDate) to \(endDate) (duration: \(duration)s)")
-            
-            var systemMetrics: [SystemMetrics] = []
-            
-            // Fetch Interval Data for each System and compute per-System totals
-            for system in config.systems {
-                DebugLogger.log("📍 Fetching data for system: \(system.name) (\(system.id))")
-                
-                let production = try await apiClient.fetchProductionIntervalData(
-                    systemID: system.id,
-                    startDate: startDate,
-                    endDate: endDate,
-                    config: config.api
-                )
-                
-                let consumption = try await apiClient.fetchConsumptionIntervalData(
-                    systemID: system.id,
-                    startDate: startDate,
-                    endDate: endDate,
-                    config: config.api
-                )
-                
-                let battery = try await apiClient.fetchBatteryIntervalData(
-                    systemID: system.id,
-                    startDate: startDate,
-                    endDate: endDate,
-                    config: config.api
-                )
-                
-                // Grid import/export may not be available for all systems
-                var gridImport: Double = 0
-                var gridExport: Double = 0
-                
-                do {
-                    let gridImportIntervals = try await apiClient.fetchGridImportIntervalData(
-                        systemID: system.id,
-                        startDate: startDate,
-                        endDate: endDate,
-                        config: config.api
-                    )
-                    gridImport = apiClient.calculateDailyTotalFromNested(from: gridImportIntervals, field: \.whImported)
-                    DebugLogger.log("✅ Grid import for \(system.name): \(gridImport) kWh")
-                } catch {
-                    DebugLogger.log("⚠️ Grid import not available for \(system.name): \(error.localizedDescription)")
-                }
-                
-                do {
-                    let gridExportIntervals = try await apiClient.fetchGridExportIntervalData(
-                        systemID: system.id,
-                        startDate: startDate,
-                        endDate: endDate,
-                        config: config.api
-                    )
-                    gridExport = apiClient.calculateDailyTotalFromNested(from: gridExportIntervals, field: \.whExported)
-                    DebugLogger.log("✅ Grid export for \(system.name): \(gridExport) kWh")
-                } catch {
-                    DebugLogger.log("⚠️ Grid export not available for \(system.name): \(error.localizedDescription)")
-                }
-                
-                // Calculate metrics using correct fields per API documentation
-                // Production uses 'wh_del' field from production_meter endpoint
-                let productionTotal = apiClient.calculateDailyTotal(from: production.intervals, field: \.whDel)
-                DebugLogger.log("📊 Production: \(production.intervals.count) intervals, total: \(productionTotal) kWh")
-                // Consumption uses 'enwh' field from consumption_meter endpoint
-                let consumptionTotal = apiClient.calculateDailyTotal(from: consumption.intervals, field: \.enwh)
-                DebugLogger.log("📊 Consumption: \(consumption.intervals.count) intervals, total: \(consumptionTotal) kWh")
-                // Grid import uses 'whImported' field from energy_import_telemetry endpoint
-                // Grid export uses 'whExported' field from energy_export_telemetry endpoint
-                // Battery charge/discharge from battery endpoint
-                let batteryCharged = apiClient.calculateBatteryCharged(from: battery.intervals)
-                DebugLogger.log("📊 Battery charged: \(battery.intervals.count) intervals, total: \(batteryCharged) kWh")
-                let batteryDischarged = apiClient.calculateBatteryDischarged(from: battery.intervals)
-                DebugLogger.log("📊 Battery discharged: \(batteryDischarged) kWh")
-                
-                // Get latest battery SOC (state of charge percentage) from last interval
-                let batterySOC = Int(battery.intervals.last?.soc?.percent ?? 0)
-                
-                let netFlow = gridImport - gridExport
-
-                let metric = SystemMetrics(
-                    id: system.id,
-                    name: system.name,
-                    productionToday: productionTotal,
-                    consumptionToday: consumptionTotal,
-                    batterySOC: batterySOC,
-                    gridImportToday: gridImport,
-                    gridExportToday: gridExport,
-                    batteryChargedToday: batteryCharged,
-                    batteryDischargedToday: batteryDischarged,
-                    netFlowToday: netFlow
-                )
-                
-                systemMetrics.append(metric)
-            }
-            
-            // Aggregate per-System totals into a single SiteMetrics
-            let totalProduction = systemMetrics.reduce(0) { $0 + $1.productionToday }
-            let totalConsumption = systemMetrics.reduce(0) { $0 + $1.consumptionToday }
-            let totalGridImport = systemMetrics.reduce(0) { $0 + $1.gridImportToday }
-            let totalGridExport = systemMetrics.reduce(0) { $0 + $1.gridExportToday }
-            let totalNetFlow = totalGridImport - totalGridExport
-
-            let aggregated = SiteMetrics(
-                timestamp: now,
-                productionToday: totalProduction,
-                consumptionToday: totalConsumption,
-                gridImportToday: totalGridImport,
-                gridExportToday: totalGridExport,
-                netFlowToday: totalNetFlow,
-                systems: systemMetrics
-            )
-            
-            // Save aggregated report to disk
-            saveCachedReport(aggregated)
-            
-            await MainActor.run {
-                self.metrics = aggregated
-                self.lastUpdated = Date()
-                self.isFromCache = false
-                self.isLoading = false
-            }
-            
-            DebugLogger.log("📦 Report cached at \(Date())")
-            
-            DebugLogger.log("✅ Fetch completed successfully at \(Date())")
-            
-        } catch {
-            DebugLogger.log("❌ Fetch failed at \(Date()): \(error.localizedDescription)")
-            
-            // Check if this is a cancellation error
-            if let urlError = error as? URLError, urlError.code == .cancelled {
-                DebugLogger.log("⚠️ Request was cancelled - this is likely due to a view update or gesture cancellation")
-                // Don't treat cancellation as a hard error - just use cached data if available
-                if let fallbackCache = await loadCachedReport() {
-                    let dataAge = Date().timeIntervalSince(fallbackCache.metrics.timestamp)
-                    DebugLogger.log("📦 Using cached report after cancellation (data age: \(String(format: "%.1f", dataAge))s)")
-                    await MainActor.run {
-                        self.metrics = fallbackCache.metrics
-                        self.lastUpdated = fallbackCache.metrics.timestamp
-                        self.isFromCache = true
-                        self.isLoading = false
-                        self.error = nil
-                    }
-                    return
-                }
-            }
-
-            // Check if this is a rate limit error
-            if let apiError = error as? APIError,
-               case .rateLimitExceeded(let waitSeconds) = apiError {
-                if retryCount < maxRetries {
-                    DebugLogger.log("⏳ Rate limit hit - waiting \(waitSeconds) seconds before retry (attempt \(retryCount + 1)/\(maxRetries + 1))...")
-
-                    // Wait the specified time
-                    try? await Task.sleep(nanoseconds: UInt64(waitSeconds) * 1_000_000_000)
-
-                    DebugLogger.log("🔄 Retrying fetch after rate limit wait...")
-                    await performFetch(config: config, retryCount: retryCount + 1)
-                    return
-                } else {
-                    DebugLogger.log("❌ Rate limit retry exhausted after \(maxRetries) attempts")
-                }
-            }
-            
-            if let apiError = error as? APIError {
-                DebugLogger.log("   Error type: \(apiError)")
-            }
-            
-            // For non-rate-limit errors, try to use cached data as fallback
-            DebugLogger.log("🔍 Attempting to load ANY cached report as fallback...")
-            if let fallbackCache = await loadCachedReport() {
-                let dataAge = Date().timeIntervalSince(fallbackCache.metrics.timestamp)
-                DebugLogger.log("📦 Using STALE cached report as fallback (data age: \(String(format: "%.1f", dataAge))s)")
-                await MainActor.run {
-                    self.metrics = fallbackCache.metrics
-                    self.lastUpdated = fallbackCache.metrics.timestamp
-                    self.isFromCache = true
-                    self.isLoading = false
-                    self.error = nil  // Clear error since we have cached data
-                }
+            if cancelPrevious {
+                DebugLogger.log("📦 No cache and budget exhausted — nothing to show")
                 return
             }
-            
-            await MainActor.run {
+            do {
+                try await waitForCooldown()
+            } catch {
+                return // task cancelled during cooldown wait
+            }
+        }
+
+        isFromCache = false
+        isLoading = true  // set before yielding so UI shows spinner immediately
+        currentFetchTask = Task { await performFetch(config: config) }
+        await currentFetchTask?.value
+        currentFetchTask = nil
+        DebugLogger.log("🔄 performFetch completed")
+    }
+
+    // MARK: - Fetch
+
+    private func performFetch(config: AppConfig) async {
+        let maxRetries = 2
+        var retryCount = 0
+
+        while retryCount <= maxRetries {
+            if retryCount == 0 {
+                lastAPICallTimestamp = Date().timeIntervalSinceReferenceDate
+            }
+
+            DebugLogger.log("🔄 Fetching data for \(config.systems.count) system(s) (attempt \(retryCount + 1)/\(maxRetries + 1))")
+            error = nil
+
+            do {
+                let calendar = Calendar.current
+                let now = Date()
+                let startDate = calendar.startOfDay(for: now)
+                DebugLogger.log("📅 Today's data: \(startDate) to \(now)")
+
+                var systemMetrics: [SystemMetrics] = []
+
+                for system in config.systems {
+                    DebugLogger.log("📍 Fetching system: \(system.name) (\(system.id))")
+
+                    let production = try await apiClient.fetchProductionIntervalData(
+                        systemID: system.id, startDate: startDate, endDate: now, config: config.api)
+                    let consumption = try await apiClient.fetchConsumptionIntervalData(
+                        systemID: system.id, startDate: startDate, endDate: now, config: config.api)
+                    let battery = try await apiClient.fetchBatteryIntervalData(
+                        systemID: system.id, startDate: startDate, endDate: now, config: config.api)
+
+                    // Grid endpoints are optional — not all systems expose them.
+                    var gridImport: Double? = nil
+                    var gridExport: Double? = nil
+
+                    do {
+                        let intervals = try await apiClient.fetchGridImportIntervalData(
+                            systemID: system.id, startDate: startDate, endDate: now, config: config.api)
+                        gridImport = EnphaseAPIClient.calculateDailyTotalFromNested(from: intervals, field: \.whImported)
+                        DebugLogger.log("✅ Grid import for \(system.name): \(gridImport.map { String($0) } ?? "nil") kWh")
+                    } catch {
+                        DebugLogger.log("⚠️ Grid import unavailable for \(system.name): \(error.localizedDescription)")
+                    }
+
+                    do {
+                        let intervals = try await apiClient.fetchGridExportIntervalData(
+                            systemID: system.id, startDate: startDate, endDate: now, config: config.api)
+                        gridExport = EnphaseAPIClient.calculateDailyTotalFromNested(from: intervals, field: \.whExported)
+                        DebugLogger.log("✅ Grid export for \(system.name): \(gridExport.map { String($0) } ?? "nil") kWh")
+                    } catch {
+                        DebugLogger.log("⚠️ Grid export unavailable for \(system.name): \(error.localizedDescription)")
+                    }
+
+                    let productionTotal   = EnphaseAPIClient.calculateDailyTotal(from: production.intervals, field: \.whDel)
+                    let consumptionTotal  = EnphaseAPIClient.calculateDailyTotal(from: consumption.intervals, field: \.enwh)
+                    let batteryCharged    = EnphaseAPIClient.calculateBatteryCharged(from: battery.intervals)
+                    let batteryDischarged = EnphaseAPIClient.calculateBatteryDischarged(from: battery.intervals)
+                    let batterySOC        = battery.intervals.last?.soc.map { Int($0.percent) }
+
+                    let netFlow: Double? = (gridImport != nil || gridExport != nil)
+                        ? (gridImport ?? 0) - (gridExport ?? 0)
+                        : nil
+
+                    DebugLogger.log("📊 \(system.name): prod=\(productionTotal) cons=\(consumptionTotal) soc=\(batterySOC.map(String.init) ?? "nil")%")
+
+                    systemMetrics.append(SystemMetrics(
+                        id: system.id,
+                        name: system.name,
+                        productionToday: productionTotal,
+                        consumptionToday: consumptionTotal,
+                        batterySOC: batterySOC,
+                        gridImportToday: gridImport,
+                        gridExportToday: gridExport,
+                        batteryChargedToday: batteryCharged > 0 ? batteryCharged : nil,
+                        batteryDischargedToday: batteryDischarged > 0 ? batteryDischarged : nil,
+                        netFlowToday: netFlow
+                    ))
+                }
+
+                let totalProduction  = systemMetrics.reduce(0.0) { $0 + $1.productionToday }
+                let totalConsumption = systemMetrics.reduce(0.0) { $0 + $1.consumptionToday }
+                let totalGridImport  = systemMetrics.reduce(0.0) { $0 + ($1.gridImportToday ?? 0) }
+                let totalGridExport  = systemMetrics.reduce(0.0) { $0 + ($1.gridExportToday ?? 0) }
+                let hasGridData = systemMetrics.contains { $0.gridImportToday != nil || $0.gridExportToday != nil }
+                let totalNetFlow: Double? = hasGridData ? totalGridImport - totalGridExport : nil
+
+                let aggregated = SiteMetrics(
+                    timestamp: now,
+                    productionToday: totalProduction,
+                    consumptionToday: totalConsumption,
+                    gridImportToday: hasGridData ? totalGridImport : nil,
+                    gridExportToday: hasGridData ? totalGridExport : nil,
+                    netFlowToday: totalNetFlow,
+                    systems: systemMetrics
+                )
+
+                saveCachedReport(aggregated)
+                metrics = aggregated
+                lastUpdated = now
+                isFromCache = false
+                isLoading = false
+                DebugLogger.log("✅ Fetch completed at \(Date())")
+                return
+
+            } catch {
+                DebugLogger.log("❌ Fetch failed: \(error.localizedDescription)")
+
+                if let urlError = error as? URLError, urlError.code == .cancelled {
+                    DebugLogger.log("⚠️ Request cancelled")
+                    if let fallback = await loadCachedReport() {
+                        metrics = fallback.metrics
+                        lastUpdated = fallback.metrics.timestamp
+                        isFromCache = true
+                        self.error = nil
+                    }
+                    isLoading = false
+                    return
+                }
+
+                if let apiError = error as? APIError, case .apiBudgetExhausted(let waitSeconds) = apiError, retryCount < maxRetries {
+                    DebugLogger.log("⏳ API Budget exhausted — waiting \(waitSeconds)s before retry...")
+                    lastAPICallTimestamp = Date().timeIntervalSinceReferenceDate
+                    do {
+                        try await Task.sleep(nanoseconds: UInt64(waitSeconds) * 1_000_000_000)
+                    } catch {
+                        isLoading = false
+                        return // task cancelled during wait
+                    }
+                    retryCount += 1
+                    continue
+                }
+
+                if retryCount >= maxRetries {
+                    DebugLogger.log("❌ API Budget retry exhausted after \(maxRetries) attempts")
+                }
+
+                if let fallback = await loadCachedReport() {
+                    let dataAge = Date().timeIntervalSince(fallback.metrics.timestamp)
+                    DebugLogger.log("📦 Using stale cached report as fallback (age: \(String(format: "%.1f", dataAge))s)")
+                    metrics = fallback.metrics
+                    lastUpdated = fallback.metrics.timestamp
+                    isFromCache = true
+                    self.error = nil
+                    isLoading = false
+                    return
+                }
+
                 self.error = error
-                self.isLoading = false
+                isLoading = false
+                return
             }
         }
     }

@@ -1,6 +1,6 @@
 //
 //  EnphaseModels.swift
-//  Enphase Monitor App
+//  My Enphase
 //
 //  Data models for Enphase energy metrics
 //
@@ -8,17 +8,17 @@
 import Foundation
 
 // MARK: - System Metrics
-struct SystemMetrics: Identifiable, Codable, @unchecked Sendable {
+struct SystemMetrics: Identifiable, Codable {
     let id: String
     let name: String
     let productionToday: Double
     let consumptionToday: Double
-    let batterySOC: Int
-    let gridImportToday: Double
-    let gridExportToday: Double
-    let batteryChargedToday: Double
-    let batteryDischargedToday: Double
-    let netFlowToday: Double
+    let batterySOC: Int?
+    let gridImportToday: Double?
+    let gridExportToday: Double?
+    let batteryChargedToday: Double?
+    let batteryDischargedToday: Double?
+    let netFlowToday: Double?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -35,13 +35,13 @@ struct SystemMetrics: Identifiable, Codable, @unchecked Sendable {
 }
 
 // MARK: - Site Metrics
-struct SiteMetrics: Codable, @unchecked Sendable {
+struct SiteMetrics: Codable {
     let timestamp: Date
     let productionToday: Double
     let consumptionToday: Double
-    let gridImportToday: Double
-    let gridExportToday: Double
-    let netFlowToday: Double
+    let gridImportToday: Double?
+    let gridExportToday: Double?
+    let netFlowToday: Double?
     let systems: [SystemMetrics]
 
     enum CodingKeys: String, CodingKey {
@@ -59,38 +59,30 @@ struct SiteMetrics: Codable, @unchecked Sendable {
 struct SystemConfig: Identifiable, Codable {
     let id: String
     let name: String
-    
-    enum CodingKeys: String, CodingKey {
-        case id
-        case name
-    }
 }
 
-struct APIConfig: Codable {
+struct APIConfig: Codable, Equatable {
     var apiKey: String
     var clientID: String
     var clientSecret: String
     var refreshToken: String
-    var authorizationURL: String
-    var redirectURI: String
-    
+    var tokenURL: String
+
     enum CodingKeys: String, CodingKey {
         case apiKey = "api_key"
         case clientID = "client_id"
         case clientSecret = "client_secret"
         case refreshToken = "refresh_token"
-        case authorizationURL = "authorization_url"
-        case redirectURI = "redirect_uri"
+        case tokenURL = "token_url"
     }
-    
+
     static var empty: APIConfig {
         APIConfig(
             apiKey: "",
             clientID: "",
             clientSecret: "",
             refreshToken: "",
-            authorizationURL: "https://api.enphaseenergy.com/oauth/token",
-            redirectURI: "enphase-monitor://callback"
+            tokenURL: "https://api.enphaseenergy.com/oauth/token"
         )
     }
 }
@@ -98,22 +90,8 @@ struct APIConfig: Codable {
 struct AppConfig: Codable {
     var api: APIConfig
     var systems: [SystemConfig]
-    var refreshInterval: Int
-    var timezone: String
-    
-    enum CodingKeys: String, CodingKey {
-        case api
-        case systems
-        case refreshInterval = "refresh_interval"
-        case timezone
-    }
-    
+
     static var empty: AppConfig {
-        AppConfig(
-            api: .empty,
-            systems: [],
-            refreshInterval: 3600,
-            timezone: "US/Pacific"
-        )
+        AppConfig(api: .empty, systems: [])
     }
 }

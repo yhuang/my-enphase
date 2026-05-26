@@ -1,70 +1,69 @@
 //
 //  SiteReportView.swift
-//  Enphase Monitor App
+//  My Enphase
 //
 //  Site-level energy report component
 //
 
 import SwiftUI
 
+// MARK: - Shared constants
+
+// Approximate character count that fills the content area at 16pt monospace on a
+// standard device. Used for both separator lines and the equals-sign header bars.
+let reportLineWidth = 37
+
+// MARK: - Shared section header (used by both SiteReportView and SystemsReportView)
+
+struct ReportSectionHeader: View {
+    let title: String
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Text(title)
+                .font(.system(size: 16, weight: .bold, design: .monospaced))
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text(String(repeating: "-", count: reportLineWidth))
+                .font(.system(size: 16, design: .monospaced))
+                .foregroundColor(.gray)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal)
+    }
+}
+
+// MARK: - Shared icon source type
+
+enum IconSource {
+    case system(String)
+    case asset(String)
+}
+
+// MARK: - Site Report View
+
 struct SiteReportView: View {
     let metrics: SiteMetrics
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            // Section Header
-            VStack(spacing: 2) {
-                Text("SITE ENERGY REPORT")
-                    .font(.system(size: 16, weight: .bold, design: .monospaced))
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                
-                Text(String(repeating: "-", count: 37))
-                    .font(.system(size: 16, design: .monospaced))
-                    .foregroundColor(.gray)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(.horizontal)
-            
-            // Metrics
+            ReportSectionHeader(title: "SITE ENERGY REPORT")
+
             VStack(spacing: 4) {
-                NetFlowRow(
-                    label: "Net Flow:",
-                    value: metrics.netFlowToday
-                )
-                
-                MetricRow(
-                    label: "Produced:",
-                    value: metrics.productionToday,
-                    color: .yellow,
-                    icon: "sun.max.fill",
-                    iconColor: .yellow
-                )
-                
-                MetricRow(
-                    label: "Consumed:",
-                    value: metrics.consumptionToday,
-                    color: .orange,
-                    icon: "plug",
-                    iconColor: .orange,
-                    isCustomIcon: true
-                )
+                NetFlowRow(label: "Net Flow:", value: metrics.netFlowToday)
 
-                MetricRow(
-                    label: "Imported:",
-                    value: metrics.gridImportToday,
-                    color: AppColors.gridImport,
-                    icon: "arrow.down.circle.fill",
-                    iconColor: AppColors.gridImport
-                )
+                MetricRow(label: "Produced:", value: metrics.productionToday,
+                          color: AppColors.production, iconSource: .system("sun.max.fill"))
 
-                MetricRow(
-                    label: "Exported:",
-                    value: metrics.gridExportToday,
-                    color: AppColors.gridExport,
-                    icon: "arrow.up.circle.fill",
-                    iconColor: AppColors.gridExport
-                )
+                MetricRow(label: "Consumed:", value: metrics.consumptionToday,
+                          color: AppColors.consumption, iconSource: .asset("plug"))
+
+                MetricRow(label: "Imported:", value: metrics.gridImportToday,
+                          color: AppColors.gridImport, iconSource: .system("arrow.down.circle.fill"))
+
+                MetricRow(label: "Exported:", value: metrics.gridExportToday,
+                          color: AppColors.gridExport, iconSource: .system("arrow.up.circle.fill"))
             }
             .padding(.horizontal)
             .padding(.leading, 10)
@@ -77,31 +76,32 @@ struct SiteReportView: View {
 }
 
 // MARK: - Metric Row
+
 struct MetricRow: View {
     let label: String
-    let value: Double
+    let value: Double?
     let color: Color
-    var icon: String? = nil
+    let iconSource: IconSource?
     var iconColor: Color? = nil
-    var isCustomIcon: Bool = false
 
     var body: some View {
         HStack(spacing: 0) {
             Group {
-                if let icon = icon {
-                    if isCustomIcon {
-                        Image(icon)
+                if let source = iconSource {
+                    switch source {
+                    case .system(let name):
+                        Image(systemName: name)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 15, height: 15)
+                            .foregroundColor(iconColor ?? color)
+                    case .asset(let name):
+                        Image(name)
                             .resizable()
                             .renderingMode(.template)
                             .scaledToFit()
                             .frame(width: 15, height: 15)
-                            .foregroundColor(iconColor ?? .white)
-                    } else {
-                        Image(systemName: icon)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 15, height: 15)
-                            .foregroundColor(iconColor ?? .white)
+                            .foregroundColor(iconColor ?? color)
                     }
                 }
             }
@@ -112,61 +112,71 @@ struct MetricRow: View {
                 .foregroundColor(.white)
                 .frame(width: 103, alignment: .leading)
 
-            Text("  ")
+            Text(formatEnergy(value))
                 .font(.system(size: 16, design: .monospaced))
-
-            Text(String(format: "%.1f kWh", value))
-                .font(.system(size: 16, design: .monospaced))
-                .foregroundColor(color)
+                .foregroundColor(value != nil ? color : .gray)
+                .padding(.leading, 16)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private func formatEnergy(_ v: Double?) -> String {
+        guard let v else { return "—" }
+        return String(format: "%.1f kWh", v)
     }
 }
 
 // MARK: - Net Flow Row
+
 struct NetFlowRow: View {
     let label: String
-    let value: Double
+    let value: Double?
 
     var body: some View {
+        let flowColor = self.flowColor
         HStack(spacing: 0) {
-            // Inner block: tightly wraps all content so the background is end-to-end
-            HStack(spacing: 0) {
-                Image("net-flow")
-                    .resizable()
-                    .renderingMode(.template)
-                    .scaledToFit()
-                    .frame(width: 15, height: 15)
-                    .foregroundColor(value >= 0 ? AppColors.gridImport : AppColors.gridExport)
-                    .frame(width: 20, alignment: .center)
+            Image("net-flow")
+                .resizable()
+                .renderingMode(.template)
+                .scaledToFit()
+                .frame(width: 15, height: 15)
+                .foregroundColor(flowColor)
+                .frame(width: 20, alignment: .center)
 
-                Text(" " + label)
-                    .font(.system(size: 16, design: .monospaced))
-                    .foregroundColor(.white)
-                    .frame(width: 103, alignment: .leading)
+            Text(" " + label)
+                .font(.system(size: 16, design: .monospaced))
+                .foregroundColor(.white)
+                .frame(width: 103, alignment: .leading)
 
-                Text("  ")
-                    .font(.system(size: 16, design: .monospaced))
-
+            if let value {
                 HStack(spacing: 4) {
                     Text(String(format: "%.1f kWh ", abs(value)))
                         .font(.system(size: 16, design: .monospaced))
-                        .foregroundColor(value >= 0 ? AppColors.gridImport : AppColors.gridExport)
+                        .foregroundColor(flowColor)
 
                     Image(systemName: value >= 0 ? "arrow.down.circle.fill" : "arrow.up.circle.fill")
                         .resizable()
                         .scaledToFit()
                         .frame(width: 15, height: 15)
-                        .foregroundColor(value >= 0 ? AppColors.gridImport : AppColors.gridExport)
+                        .foregroundColor(flowColor)
                 }
+                .padding(.leading, 16)
+            } else {
+                Text("—")
+                    .font(.system(size: 16, design: .monospaced))
+                    .foregroundColor(.gray)
+                    .padding(.leading, 16)
             }
-            .padding(.horizontal, 10) // 1 monospace space character each side
-            .padding(.vertical, 2)
-            .background(value >= 0 ? AppColors.gridImportBackground : AppColors.gridExportBackground)
-
-            Spacer()
         }
-        .padding(.leading, -10) // shift 1 monospace character left
+        .padding(.trailing, 10)
+        .padding(.vertical, 2)
+        .background(value.map { $0 >= 0 ? AppColors.gridImportBackground : AppColors.gridExportBackground } ?? Color.clear)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var flowColor: Color {
+        guard let value else { return .gray }
+        return value >= 0 ? AppColors.gridImport : AppColors.gridExport
     }
 }
 

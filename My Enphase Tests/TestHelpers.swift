@@ -1,7 +1,7 @@
 import XCTest
 @testable import My_Enphase
 
-// MARK: - Tolerance assertion (mirrors sister project: 10% or 0.1 kWh, whichever is larger)
+// MARK: - Tolerance assertion (10% or 0.05 kWh, whichever is larger)
 
 func assertMetric(
     _ actual: Double,
@@ -10,7 +10,7 @@ func assertMetric(
     file: StaticString = #file,
     line: UInt = #line
 ) {
-    let tolerance = max(abs(expected) * 0.10, 0.1)
+    let tolerance = max(abs(expected) * 0.10, 0.05)
     XCTAssertEqual(
         actual, expected, accuracy: tolerance,
         "\(label): got \(String(format: "%.3f", actual)) kWh, expected \(String(format: "%.3f", expected)) kWh (±\(String(format: "%.3f", tolerance)) kWh)",
@@ -66,33 +66,19 @@ struct FixtureExpectedSystemMetrics: Decodable {
     }
 }
 
-// MARK: - Fixture loading helpers
-
-func loadFixture<T: Decodable>(_ filename: String, as type: T.Type) throws -> T {
-    let bundle = Bundle(for: CalculationTests.self)
-    guard let url = bundle.url(forResource: filename, withExtension: nil) else {
-        throw XCTSkip("Fixture not found: \(filename) — run Settings > Export Test Fixtures first")
-    }
-    let data = try Data(contentsOf: url)
-    return try JSONDecoder().decode(type, from: data)
-}
-
 // MARK: - EnergyInterval builders
 
 func makeInterval(whDel: Double? = nil, enwh: Double? = nil,
                   whImported: Double? = nil, whExported: Double? = nil,
-                  chargeEnwh: Double? = nil, dischargeEnwh: Double? = nil,
+                  chargeEnergyWh: Double? = nil, dischargeEnergyWh: Double? = nil,
                   socPercent: Double? = nil) -> EnergyInterval {
     EnergyInterval(
-        endAt: 0,
-        devicesReporting: 1,
         whDel: whDel,
-        whRec: nil,
         enwh: enwh,
         whImported: whImported,
         whExported: whExported,
-        soc: socPercent.map { BatterySOC(percent: $0, devicesReporting: 1) },
-        charge: chargeEnwh.map { BatteryMetrics(enwh: $0) },
-        discharge: dischargeEnwh.map { BatteryMetrics(enwh: $0) }
+        soc: socPercent.map { BatterySOC(percent: $0) },
+        charge: chargeEnergyWh.map { BatteryEnergyReading(energyWh: $0) },
+        discharge: dischargeEnergyWh.map { BatteryEnergyReading(energyWh: $0) }
     )
 }
