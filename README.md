@@ -178,11 +178,12 @@ bash test.sh
 
 If you want to sideload the app onto a real iPhone without a paid Apple Developer account, use **SideStore** with an `.ipa` built from this script.
 
-1. Find your Apple Team ID:
+1. Print the values you need for your `.env`:
    ```bash
-   bash build.sh --team-id
+   bash build.sh --setup
    ```
-2. Copy the 10-character ID into `DEVELOPMENT_TEAM` in your `.env`
+   This shows your `BUNDLE_ID` (detected from the project), `DEVELOPMENT_TEAM` (all signing identities on this Mac), and `SIMULATOR_ID` (all available simulators).
+2. Copy the values into your `.env`
 3. Build and deliver to iCloud Drive:
    ```bash
    bash build.sh

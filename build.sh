@@ -7,7 +7,7 @@
 #
 # Usage:
 #   bash build.sh              # build and deliver the .ipa
-#   bash build.sh --team-id   # print your Apple Team ID and exit
+#   bash build.sh --setup      # print BUNDLE_ID, DEVELOPMENT_TEAM, and SIMULATOR_ID values
 #
 # SETUP:
 #   Copy .env.example to .env and fill in your values before running.
@@ -20,18 +20,55 @@
 #
 set -euo pipefail
 
-# ── --team-id helper ─────────────────────────────────────────────────────────
-if [ "${1:-}" = "--team-id" ]; then
-  echo "Apple Developer Team IDs found on this Mac:"
-  security find-identity -v -p codesigning 2>/dev/null \
-    | grep -oE '"[^"]+"' \
-    | sort -u \
-    | while IFS= read -r cert; do
-        tid=$(echo "$cert" | grep -oE '[A-Z0-9]{10}' | tail -1)
-        [ -n "$tid" ] && echo "  $tid  $cert"
-      done
+# ── --setup helper ───────────────────────────────────────────────────────────
+if [ "${1:-}" = "--setup" ]; then
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  XCPROJ="$SCRIPT_DIR/My Enphase.xcodeproj/project.pbxproj"
+
   echo ""
-  echo "Paste the 10-character ID into DEVELOPMENT_TEAM in your .env"
+  echo "============================================================"
+  echo " .env values for first-time setup"
+  echo "============================================================"
+
+  # BUNDLE_ID
+  echo ""
+  echo "BUNDLE_ID"
+  BUNDLE=$(grep -m1 'PRODUCT_BUNDLE_IDENTIFIER' "$XCPROJ" 2>/dev/null \
+    | sed 's/.*= *//; s/["; ]//g' || true)
+  if [ -n "$BUNDLE" ]; then
+    echo "  $BUNDLE"
+  else
+    echo "  (could not detect — check Xcode: target → General → Bundle Identifier)"
+  fi
+
+  # DEVELOPMENT_TEAM
+  echo ""
+  echo "DEVELOPMENT_TEAM"
+  TEAMS=$(security find-identity -v -p codesigning 2>/dev/null \
+    | grep -oE '"[^"]+"' | sort -u || true)
+  if [ -n "$TEAMS" ]; then
+    echo "$TEAMS" | while IFS= read -r cert; do
+      tid=$(echo "$cert" | grep -oE '[A-Z0-9]{10}' | tail -1)
+      [ -n "$tid" ] && echo "  $tid  $cert"
+    done
+  else
+    echo "  (no signing identities found — sign into Xcode with your Apple ID first)"
+    echo "  Xcode → Settings → Accounts → add Apple ID"
+  fi
+
+  # SIMULATOR_ID
+  echo ""
+  echo "SIMULATOR_ID"
+  xcrun simctl list devices available 2>/dev/null \
+    | grep 'iPhone' \
+    | sed 's/^[[:space:]]*/  /' || echo "  (no simulators found — install one via Xcode → Settings → Platforms)"
+
+  echo ""
+  echo "============================================================"
+  echo " Copy the values above into your .env file."
+  echo " Run  cp .env.example .env  first if you haven't already."
+  echo "============================================================"
+  echo ""
   exit 0
 fi
 
