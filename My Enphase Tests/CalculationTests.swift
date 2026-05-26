@@ -53,7 +53,7 @@ final class CalculationTests: XCTestCase {
     // MARK: - Grid Import / Export (nested whImported / whExported)
 
     func testGridImportSumsNestedIntervals() {
-        let nested: [[TelemetryInterval]] = [
+        let nested: [[EnergyInterval]] = [
             [makeInterval(whImported: 300), makeInterval(whImported: 400)],
             [makeInterval(whImported: 100), makeInterval(whImported: 200)],
         ]
@@ -62,7 +62,7 @@ final class CalculationTests: XCTestCase {
     }
 
     func testGridExportSumsNestedIntervals() {
-        let nested: [[TelemetryInterval]] = [
+        let nested: [[EnergyInterval]] = [
             [makeInterval(whExported: 150), makeInterval(whExported: 350)],
         ]
         // 500 Wh → 0.5 kWh

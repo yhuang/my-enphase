@@ -1,5 +1,5 @@
 //
-//  APICache.swift
+//  Cache.swift
 //  Enphase Monitor App
 //
 //  Persistent cache for API responses with 60-second TTL
@@ -11,8 +11,8 @@ import Foundation
 import UIKit
 #endif
 
-class APICache {
-    static let shared = APICache()
+class Cache {
+    static let shared = Cache()
     
     private struct CacheEntry: Codable {
         let data: Data
@@ -22,7 +22,7 @@ class APICache {
     }
     
     private var cache: [String: CacheEntry] = [:]
-    private let cacheQueue = DispatchQueue(label: "com.enphase.apicache", attributes: .concurrent)
+    private let cacheQueue = DispatchQueue(label: "com.enphase.cache", attributes: .concurrent)
     private let cacheTTL: TimeInterval = 60 // 60 seconds
     private let maxEntries = 20
     private let cacheFileURL: URL
@@ -31,7 +31,7 @@ class APICache {
     private init() {
         // Get cache directory
         let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-        cacheFileURL = cacheDir.appendingPathComponent("enphase_api_cache.json")
+        cacheFileURL = cacheDir.appendingPathComponent("enphase_cache.json")
         
         // Load cache from disk
         loadCacheFromDisk()

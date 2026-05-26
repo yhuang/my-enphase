@@ -30,12 +30,12 @@ struct FixtureRecorder {
 
     private static func extractAPIFixtures(config: AppConfig, to destDir: URL) {
         let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-        let cacheURL = cacheDir.appendingPathComponent("enphase_api_cache.json")
+        let cacheURL = cacheDir.appendingPathComponent("enphase_cache.json")
 
         guard let cacheData = try? Data(contentsOf: cacheURL),
               let raw = try? JSONSerialization.jsonObject(with: cacheData) as? [String: [String: Any]]
         else {
-            DebugLogger.log("⚠️ FixtureRecorder: could not read APICache from disk")
+            DebugLogger.log("⚠️ FixtureRecorder: could not read Cache from disk")
             return
         }
 
@@ -56,7 +56,7 @@ struct FixtureRecorder {
                     continue
                 }
 
-                // The APICache serialises Data as base64; decode it to get the raw JSON bytes.
+                // The Cache serialises Data as base64; decode it to get the raw JSON bytes.
                 guard let base64 = entry["data"] as? String,
                       let responseData = Data(base64Encoded: base64)
                 else {

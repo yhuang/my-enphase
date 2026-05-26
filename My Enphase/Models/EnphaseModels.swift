@@ -34,7 +34,7 @@ struct SystemMetrics: Identifiable, Codable, @unchecked Sendable {
     }
 }
 
-// MARK: - Aggregated Metrics
+// MARK: - Site Metrics
 struct SiteMetrics: Codable, @unchecked Sendable {
     let timestamp: Date
     let productionToday: Double

@@ -239,7 +239,7 @@ struct SystemNetFlowRow: View {
         systems: [
             SystemMetrics(
                 id: "5525881",
-                name: "Right Subpanel",
+                name: "Main House",
                 productionToday: 14.6,
                 consumptionToday: 32.1,
                 batterySOC: 63,
@@ -251,7 +251,7 @@ struct SystemNetFlowRow: View {
             ),
             SystemMetrics(
                 id: "5392556",
-                name: "Left Subpanel",
+                name: "Garage",
                 productionToday: 18.9,
                 consumptionToday: 16.4,
                 batterySOC: 74,

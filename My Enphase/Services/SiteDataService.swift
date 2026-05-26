@@ -230,21 +230,21 @@ class SiteDataService: ObservableObject {
             for system in config.systems {
                 DebugLogger.log("📍 Fetching data for system: \(system.name) (\(system.id))")
                 
-                let production = try await apiClient.fetchTelemetry(
+                let production = try await apiClient.fetchProductionIntervalData(
                     systemID: system.id,
                     startDate: startDate,
                     endDate: endDate,
                     config: config.api
                 )
                 
-                let consumption = try await apiClient.fetchConsumptionTelemetry(
+                let consumption = try await apiClient.fetchConsumptionIntervalData(
                     systemID: system.id,
                     startDate: startDate,
                     endDate: endDate,
                     config: config.api
                 )
                 
-                let battery = try await apiClient.fetchBatteryTelemetry(
+                let battery = try await apiClient.fetchBatteryIntervalData(
                     systemID: system.id,
                     startDate: startDate,
                     endDate: endDate,
@@ -256,7 +256,7 @@ class SiteDataService: ObservableObject {
                 var gridExport: Double = 0
                 
                 do {
-                    let gridImportIntervals = try await apiClient.fetchGridImportTelemetry(
+                    let gridImportIntervals = try await apiClient.fetchGridImportIntervalData(
                         systemID: system.id,
                         startDate: startDate,
                         endDate: endDate,
@@ -269,7 +269,7 @@ class SiteDataService: ObservableObject {
                 }
                 
                 do {
-                    let gridExportIntervals = try await apiClient.fetchGridExportTelemetry(
+                    let gridExportIntervals = try await apiClient.fetchGridExportIntervalData(
                         systemID: system.id,
                         startDate: startDate,
                         endDate: endDate,
