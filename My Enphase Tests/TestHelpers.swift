@@ -77,13 +77,13 @@ func loadFixture<T: Decodable>(_ filename: String, as type: T.Type) throws -> T 
     return try JSONDecoder().decode(type, from: data)
 }
 
-// MARK: - TelemetryInterval builders
+// MARK: - EnergyInterval builders
 
 func makeInterval(whDel: Double? = nil, enwh: Double? = nil,
                   whImported: Double? = nil, whExported: Double? = nil,
                   chargeEnwh: Double? = nil, dischargeEnwh: Double? = nil,
-                  socPercent: Double? = nil) -> TelemetryInterval {
-    TelemetryInterval(
+                  socPercent: Double? = nil) -> EnergyInterval {
+    EnergyInterval(
         endAt: 0,
         devicesReporting: 1,
         whDel: whDel,

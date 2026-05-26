@@ -16,7 +16,7 @@ enum APIError: Error, LocalizedError {
     case decodingError(Error)
     case authenticationRequired
     case rateLimitExceeded(waitSeconds: Int)
-    
+
     var errorDescription: String? {
         switch self {
         case .invalidURL:
@@ -52,14 +52,14 @@ struct BatteryMetrics: Codable {
 struct BatterySOC: Codable {
     let percent: Double
     let devicesReporting: Int?
-    
+
     enum CodingKeys: String, CodingKey {
         case percent
         case devicesReporting = "devices_reporting"
     }
 }
 
-struct TelemetryInterval: Codable {
+struct EnergyInterval: Codable {
     let endAt: Int
     let devicesReporting: Int?
     let whDel: Double?      // Energy values should be Double
@@ -70,7 +70,7 @@ struct TelemetryInterval: Codable {
     let soc: BatterySOC?    // Battery state of charge object
     let charge: BatteryMetrics?
     let discharge: BatteryMetrics?
-    
+
     enum CodingKeys: String, CodingKey {
         case endAt = "end_at"
         case devicesReporting = "devices_reporting"
@@ -85,15 +85,15 @@ struct TelemetryInterval: Codable {
     }
 }
 
-struct TelemetryResponse: Codable {
+struct IntervalDataResponse: Codable {
     let systemId: Int
     let granularity: String?
     let totalDevices: Int?
     let startAt: Int?
     let endAt: Int?
     let items: String?
-    let intervals: [TelemetryInterval]
-    
+    let intervals: [EnergyInterval]
+
     enum CodingKeys: String, CodingKey {
         case systemId = "system_id"
         case granularity
@@ -105,25 +105,13 @@ struct TelemetryResponse: Codable {
     }
 }
 
-struct EnergyLifetimeResponse: Codable {
-    let systemId: String
-    let startDate: String
-    let production: [Int]
-    
-    enum CodingKeys: String, CodingKey {
-        case systemId = "system_id"
-        case startDate = "start_date"
-        case production
-    }
-}
-
 // MARK: - OAuth Response
 struct OAuthTokenResponse: Codable {
     let accessToken: String
     let tokenType: String
     let expiresIn: Int
     let refreshToken: String?
-    
+
     enum CodingKeys: String, CodingKey {
         case accessToken = "access_token"
         case tokenType = "token_type"
@@ -138,7 +126,7 @@ class EnphaseAPIClient: ObservableObject {
     private let session: URLSession
     @Published var currentAccessToken: String?
     private var accessTokenExpiry: Date?
-    
+
     init() {
         // Configure URLSession with proper timeouts and connection limits
         let config = URLSessionConfiguration.default
@@ -148,11 +136,11 @@ class EnphaseAPIClient: ObservableObject {
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
         self.session = URLSession(configuration: config)
     }
-    
+
     deinit {
         session.invalidateAndCancel()
     }
-    
+
     // MARK: - OAuth Token Management
     func refreshAccessToken(using config: APIConfig) async throws -> String {
         // Check if we have a valid cached token
@@ -161,55 +149,55 @@ class EnphaseAPIClient: ObservableObject {
            expiry > Date().addingTimeInterval(60) { // 1 minute buffer
             return token
         }
-        
+
         guard let url = URL(string: config.authorizationURL) else {
             throw APIError.invalidURL
         }
-        
+
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        
+
         // Basic Authentication: base64(client_id:client_secret)
         let credentials = "\(config.clientID):\(config.clientSecret)"
         if let credentialsData = credentials.data(using: .utf8) {
             let base64Credentials = credentialsData.base64EncodedString()
             request.setValue("Basic \(base64Credentials)", forHTTPHeaderField: "Authorization")
         }
-        
+
         // URL encode the refresh token to handle special characters
         guard let encodedRefreshToken = config.refreshToken.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
             throw APIError.invalidURL
         }
-        
+
         // Only send grant_type and refresh_token in body (NOT client_id/client_secret)
         let bodyParams = [
             "grant_type=refresh_token",
             "refresh_token=\(encodedRefreshToken)"
         ].joined(separator: "&")
-        
+
         request.httpBody = bodyParams.data(using: .utf8)
-        
+
         do {
             let (data, response) = try await session.data(for: request)
-            
+
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw APIError.invalidResponse
             }
-            
+
             guard httpResponse.statusCode == 200 else {
                 let message = String(data: data, encoding: .utf8) ?? "Unknown error"
                 throw APIError.httpError(statusCode: httpResponse.statusCode, message: message)
             }
-            
+
             let tokenResponse = try JSONDecoder().decode(OAuthTokenResponse.self, from: data)
-            
+
             // Cache the token
             await MainActor.run {
                 self.currentAccessToken = tokenResponse.accessToken
                 self.accessTokenExpiry = Date().addingTimeInterval(TimeInterval(tokenResponse.expiresIn))
             }
-            
+
             return tokenResponse.accessToken
         } catch let error as APIError {
             throw error
@@ -217,7 +205,7 @@ class EnphaseAPIClient: ObservableObject {
             throw APIError.networkError(error)
         }
     }
-    
+
     // MARK: - API Requests
     private func makeRequest<T: Decodable>(
         endpoint: String,
@@ -228,18 +216,18 @@ class EnphaseAPIClient: ObservableObject {
         guard let encodedApiKey = apiKey.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
             throw APIError.invalidURL
         }
-        
+
         // API key must be in URL parameters, not headers
         let separator = endpoint.contains("?") ? "&" : "?"
         let urlString = "\(baseURL)/\(endpoint)\(separator)key=\(encodedApiKey)"
-        
+
         guard let url = URL(string: urlString) else {
             throw APIError.invalidURL
         }
-        
+
         // Check cache first
         DebugLogger.log("🔍 Checking cache for URL: \(urlString.prefix(100))...")
-        if let cached = APICache.shared.getCachedResponse(for: urlString) {
+        if let cached = Cache.shared.getCachedResponse(for: urlString) {
             do {
                 // Try to decode cached data
                 let decoded = try JSONDecoder().decode(T.self, from: cached.data)
@@ -248,25 +236,25 @@ class EnphaseAPIClient: ObservableObject {
             } catch {
                 // Cache contains invalid data - clear it and fetch fresh
                 DebugLogger.log("⚠️ Cache data invalid, fetching fresh: \(error)")
-                APICache.shared.clearCache(for: urlString)
+                Cache.shared.clearCache(for: urlString)
             }
         } else {
             DebugLogger.log("🌐 No valid cache, making live API request")
         }
-        
+
         // Make live API request
-        
+
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        
+
         do {
             let (data, response) = try await session.data(for: request)
-            
+
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw APIError.invalidResponse
             }
-            
+
             switch httpResponse.statusCode {
             case 200:
                 do {
@@ -274,20 +262,20 @@ class EnphaseAPIClient: ObservableObject {
                     if let jsonString = String(data: data, encoding: .utf8) {
                         DebugLogger.log("📥 API Response: \(jsonString.prefix(500))")
                     }
-                    
+
                     // Store in cache before decoding
                     let headers = httpResponse.allHeaderFields.reduce(into: [String: String]()) { result, header in
                         if let key = header.key as? String, let value = header.value as? String {
                             result[key] = value
                         }
                     }
-                    APICache.shared.cacheResponse(
+                    Cache.shared.cacheResponse(
                         for: urlString,
                         data: data,
                         statusCode: httpResponse.statusCode,
                         headers: headers
                     )
-                    
+
                     return try JSONDecoder().decode(T.self, from: data)
                 } catch {
                     DebugLogger.log("❌ Decoding error: \(error)")
@@ -322,116 +310,116 @@ class EnphaseAPIClient: ObservableObject {
             throw APIError.networkError(error)
         }
     }
-    
-    // MARK: - Fetch System Telemetry
-    func fetchTelemetry(
+
+    // MARK: - Fetch Production Interval Data
+    func fetchProductionIntervalData(
         systemID: String,
         startDate: Date,
         endDate: Date,
         config: APIConfig
-    ) async throws -> TelemetryResponse {
+    ) async throws -> IntervalDataResponse {
         let accessToken = try await refreshAccessToken(using: config)
-        
+
         let startTimestamp = Int(startDate.timeIntervalSince1970)
         let endTimestamp = Int(endDate.timeIntervalSince1970)
-        
+
         DebugLogger.log("📡 Production API: start=\(startTimestamp) (\(startDate)), end=\(endTimestamp) (\(endDate)), duration=\(endTimestamp-startTimestamp)s)")
-        
+
         let endpoint = "systems/\(systemID)/telemetry/production_meter?start_at=\(startTimestamp)&end_at=\(endTimestamp)"
-        
+
         return try await makeRequest(endpoint: endpoint, accessToken: accessToken, apiKey: config.apiKey)
     }
-    
-    // MARK: - Fetch Battery Data
-    func fetchBatteryTelemetry(
+
+    // MARK: - Fetch Battery Interval Data
+    func fetchBatteryIntervalData(
         systemID: String,
         startDate: Date,
         endDate: Date,
         config: APIConfig
-    ) async throws -> TelemetryResponse {
+    ) async throws -> IntervalDataResponse {
         let accessToken = try await refreshAccessToken(using: config)
-        
+
         let startTimestamp = Int(startDate.timeIntervalSince1970)
         let endTimestamp = Int(endDate.timeIntervalSince1970)
-        
+
         DebugLogger.log("📡 Battery API: start=\(startTimestamp), end=\(endTimestamp), duration=\(endTimestamp-startTimestamp)s)")
-        
+
         let endpoint = "systems/\(systemID)/telemetry/battery?start_at=\(startTimestamp)&end_at=\(endTimestamp)"
-        
+
         return try await makeRequest(endpoint: endpoint, accessToken: accessToken, apiKey: config.apiKey)
     }
-    
-    // MARK: - Fetch Energy Consumption
-    func fetchConsumptionTelemetry(
+
+    // MARK: - Fetch Consumption Interval Data
+    func fetchConsumptionIntervalData(
         systemID: String,
         startDate: Date,
         endDate: Date,
         config: APIConfig
-    ) async throws -> TelemetryResponse {
+    ) async throws -> IntervalDataResponse {
         let accessToken = try await refreshAccessToken(using: config)
-        
+
         let startTimestamp = Int(startDate.timeIntervalSince1970)
         let endTimestamp = Int(endDate.timeIntervalSince1970)
-        
+
         DebugLogger.log("📡 Consumption API: start=\(startTimestamp), end=\(endTimestamp), duration=\(endTimestamp-startTimestamp)s)")
-        
+
         let endpoint = "systems/\(systemID)/telemetry/consumption_meter?start_at=\(startTimestamp)&end_at=\(endTimestamp)"
-        
+
         return try await makeRequest(endpoint: endpoint, accessToken: accessToken, apiKey: config.apiKey)
     }
-    
-    // MARK: - Fetch Grid Import
-    func fetchGridImportTelemetry(
+
+    // MARK: - Fetch Grid Import Interval Data
+    func fetchGridImportIntervalData(
         systemID: String,
         startDate: Date,
         endDate: Date,
         config: APIConfig
-    ) async throws -> [[TelemetryInterval]] {
+    ) async throws -> [[EnergyInterval]] {
         let accessToken = try await refreshAccessToken(using: config)
-        
+
         let startTimestamp = Int(startDate.timeIntervalSince1970)
         let endTimestamp = Int(endDate.timeIntervalSince1970)
-        
+
         DebugLogger.log("📡 Grid Import API: start=\(startTimestamp), end=\(endTimestamp), duration=\(endTimestamp-startTimestamp)s")
-        
+
         let endpoint = "systems/\(systemID)/energy_import_telemetry?start_at=\(startTimestamp)&end_at=\(endTimestamp)"
-        
+
         struct GridImportResponse: Codable {
-            let intervals: [[TelemetryInterval]]
+            let intervals: [[EnergyInterval]]
         }
-        
+
         let response: GridImportResponse = try await makeRequest(endpoint: endpoint, accessToken: accessToken, apiKey: config.apiKey)
         DebugLogger.log("📊 Grid Import Response: \(response.intervals.count) nested arrays, total intervals: \(response.intervals.flatMap { $0 }.count)")
         return response.intervals
     }
-    
-    // MARK: - Fetch Grid Export
-    func fetchGridExportTelemetry(
+
+    // MARK: - Fetch Grid Export Interval Data
+    func fetchGridExportIntervalData(
         systemID: String,
         startDate: Date,
         endDate: Date,
         config: APIConfig
-    ) async throws -> [[TelemetryInterval]] {
+    ) async throws -> [[EnergyInterval]] {
         let accessToken = try await refreshAccessToken(using: config)
-        
+
         let startTimestamp = Int(startDate.timeIntervalSince1970)
         let endTimestamp = Int(endDate.timeIntervalSince1970)
-        
+
         DebugLogger.log("📡 Grid Export API: start=\(startTimestamp), end=\(endTimestamp), duration=\(endTimestamp-startTimestamp)s")
-        
+
         let endpoint = "systems/\(systemID)/energy_export_telemetry?start_at=\(startTimestamp)&end_at=\(endTimestamp)"
-        
+
         struct GridExportResponse: Codable {
-            let intervals: [[TelemetryInterval]]
+            let intervals: [[EnergyInterval]]
         }
-        
+
         let response: GridExportResponse = try await makeRequest(endpoint: endpoint, accessToken: accessToken, apiKey: config.apiKey)
         DebugLogger.log("📊 Grid Export Response: \(response.intervals.count) nested arrays, total intervals: \(response.intervals.flatMap { $0 }.count)")
         return response.intervals
     }
-    
+
     // MARK: - Helper Methods
-    func calculateDailyTotal(from intervals: [TelemetryInterval], field: KeyPath<TelemetryInterval, Double?>) -> Double {
+    func calculateDailyTotal(from intervals: [EnergyInterval], field: KeyPath<EnergyInterval, Double?>) -> Double {
         let total = intervals.reduce(0) { sum, interval in
             sum + (interval[keyPath: field] ?? 0)
         }
@@ -446,8 +434,8 @@ class EnphaseAPIClient: ObservableObject {
         }
         return kWh
     }
-    
-    func calculateDailyTotalFromNested(from nestedIntervals: [[TelemetryInterval]], field: KeyPath<TelemetryInterval, Double?>) -> Double {
+
+    func calculateDailyTotalFromNested(from nestedIntervals: [[EnergyInterval]], field: KeyPath<EnergyInterval, Double?>) -> Double {
         let flatIntervals = nestedIntervals.flatMap { $0 }
         let total = calculateDailyTotal(from: flatIntervals, field: field)
         DebugLogger.log("📊 Calculated total from \(flatIntervals.count) intervals: \(total) kWh")
@@ -456,15 +444,15 @@ class EnphaseAPIClient: ObservableObject {
         }
         return total
     }
-    
-    func calculateBatteryCharged(from intervals: [TelemetryInterval]) -> Double {
+
+    func calculateBatteryCharged(from intervals: [EnergyInterval]) -> Double {
         let total = intervals.reduce(0) { sum, interval in
             sum + (interval.charge?.enwh ?? 0)
         }
         return total / 1000.0 // Convert Wh to kWh
     }
-    
-    func calculateBatteryDischarged(from intervals: [TelemetryInterval]) -> Double {
+
+    func calculateBatteryDischarged(from intervals: [EnergyInterval]) -> Double {
         let total = intervals.reduce(0) { sum, interval in
             sum + (interval.discharge?.enwh ?? 0)
         }

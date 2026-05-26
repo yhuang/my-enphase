@@ -88,13 +88,13 @@ struct SettingsView: View {
                 Section {
                     Button("Clear Cache") {
                         // Note: This is handled at SiteDataService level now
-                        // Individual API cache is only used as fallback
-                        APICache.shared.clearCache()
+                        // Individual Cache is only used as fallback
+                        Cache.shared.clearCache()
                     }
 
                     Button("Clear All Data", role: .destructive) {
                         configManager.clearConfig()
-                        APICache.shared.clearCache()
+                        Cache.shared.clearCache()
                         loadCurrentConfig()
                     }
                 }

@@ -117,7 +117,9 @@ On first launch the dashboard will be empty. Tap the **gear icon (⚙)** to open
 
 Back on the dashboard, tap the **refresh button (↻)** to load today's data.
 
-> **Watt plan rate limit:** The free Enphase plan allows 10 API requests per minute. With 2 systems × 5 metrics = 10 calls per refresh, one full refresh uses the entire minute's budget. The app tracks this with a 60-second cooldown and serves cached data instead of re-fetching when the budget is exhausted.
+> **API Budget:** The free Enphase Watt plan provides 10 API requests per minute. With 2 systems × 5 metrics = 10 calls per fetch, one full fetch exhausts the entire per-minute budget. The app tracks this with a 60-second cooldown and serves cached data instead of re-fetching when the budget is exhausted.
+
+> **Cache persistence:** The last fetched report is saved to disk. If you close and reopen the app within 60 seconds of a successful fetch, the cached data is shown immediately without any API calls.
 
 ---
 

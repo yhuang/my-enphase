@@ -23,9 +23,9 @@ final class SiteDataServiceTests: XCTestCase {
         let (expected, fixtures) = try loadFixtureDate()
 
         for system in expected.systems {
-            let production  = try loadTelemetryResponse(fixtures: fixtures, endpoint: "production",  systemID: system.id)
-            let consumption = try loadTelemetryResponse(fixtures: fixtures, endpoint: "consumption", systemID: system.id)
-            let battery     = try loadTelemetryResponse(fixtures: fixtures, endpoint: "battery",     systemID: system.id)
+            let production  = try loadIntervalDataResponse(fixtures: fixtures, endpoint: "production",  systemID: system.id)
+            let consumption = try loadIntervalDataResponse(fixtures: fixtures, endpoint: "consumption", systemID: system.id)
+            let battery     = try loadIntervalDataResponse(fixtures: fixtures, endpoint: "battery",     systemID: system.id)
             let gridImport  = try loadNestedIntervals  (fixtures: fixtures, endpoint: "grid_import", systemID: system.id)
             let gridExport  = try loadNestedIntervals  (fixtures: fixtures, endpoint: "grid_export", systemID: system.id)
 
@@ -56,8 +56,8 @@ final class SiteDataServiceTests: XCTestCase {
         var totalGridExport:   Double = 0
 
         for system in expected.systems {
-            let production  = try loadTelemetryResponse(fixtures: fixtures, endpoint: "production",  systemID: system.id)
-            let consumption = try loadTelemetryResponse(fixtures: fixtures, endpoint: "consumption", systemID: system.id)
+            let production  = try loadIntervalDataResponse(fixtures: fixtures, endpoint: "production",  systemID: system.id)
+            let consumption = try loadIntervalDataResponse(fixtures: fixtures, endpoint: "consumption", systemID: system.id)
             let gridImport  = try loadNestedIntervals  (fixtures: fixtures, endpoint: "grid_import", systemID: system.id)
             let gridExport  = try loadNestedIntervals  (fixtures: fixtures, endpoint: "grid_export", systemID: system.id)
 
@@ -109,20 +109,20 @@ private extension SiteDataServiceTests {
         return (expected, dateDir)
     }
 
-    func loadTelemetryResponse(fixtures: URL, endpoint: String, systemID: String) throws -> TelemetryResponse {
+    func loadIntervalDataResponse(fixtures: URL, endpoint: String, systemID: String) throws -> IntervalDataResponse {
         let url = fixtures.appendingPathComponent("\(endpoint)_\(systemID).json")
         guard FileManager.default.fileExists(atPath: url.path) else {
             throw XCTSkip("Missing fixture: \(endpoint)_\(systemID).json")
         }
-        return try JSONDecoder().decode(TelemetryResponse.self, from: Data(contentsOf: url))
+        return try JSONDecoder().decode(IntervalDataResponse.self, from: Data(contentsOf: url))
     }
 
-    func loadNestedIntervals(fixtures: URL, endpoint: String, systemID: String) throws -> [[TelemetryInterval]] {
+    func loadNestedIntervals(fixtures: URL, endpoint: String, systemID: String) throws -> [[EnergyInterval]] {
         let url = fixtures.appendingPathComponent("\(endpoint)_\(systemID).json")
         guard FileManager.default.fileExists(atPath: url.path) else {
             throw XCTSkip("Missing fixture: \(endpoint)_\(systemID).json")
         }
-        struct Wrapper: Decodable { let intervals: [[TelemetryInterval]] }
+        struct Wrapper: Decodable { let intervals: [[EnergyInterval]] }
         return try JSONDecoder().decode(Wrapper.self, from: Data(contentsOf: url)).intervals
     }
 }

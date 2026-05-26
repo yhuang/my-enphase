@@ -40,18 +40,18 @@ Total electrical load drawn by a System's subpanel, regardless of source (solar,
 _Avoid_: Load, demand, grid consumption
 
 **Grid Import**:
-Energy drawn from the utility grid into a System. Code identifier: `gridImport`.
+Energy drawn from the utility grid into a System. Code identifier: `gridImportToday`.
 _Avoid_: Import, energy import, grid draw
 
 **Grid Export**:
-Energy pushed from a System into the utility grid. Code identifier: `gridExport`.
+Energy pushed from a System into the utility grid. Code identifier: `gridExportToday`.
 _Avoid_: Export, energy export, grid feed
 
 **Battery Charge**:
-Energy stored into a System's batteries during the current day. Code identifier: `batteryCharged`.
+Energy stored into a System's batteries during the current day. Code identifier: `batteryChargedToday`.
 
 **Battery Discharge**:
-Energy drawn from a System's batteries during the current day. Code identifier: `batteryDischarged`.
+Energy drawn from a System's batteries during the current day. Code identifier: `batteryDischargedToday`.
 
 **State of Charge (SOC)**:
 The battery charge level of a System, expressed as a percentage (0–100). Derived from the last interval of the battery telemetry response for the current day. Code identifier: `batterySOC`.
