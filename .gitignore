@@ -107,6 +107,13 @@ iOSInjectionProject/
 .vscode/
 .idea/
 
+# Local credentials — never commit
+.env
+
+# Test fixtures — user-specific (system IDs, real energy data); each developer
+# generates their own via  bash record-fixtures.sh  or Settings > Export Test Fixtures
+My\ Enphase\ Tests/test-data/
+
 # Test credentials (if you create any test files)
 test-credentials.json
 config.json

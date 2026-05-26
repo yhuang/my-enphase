@@ -8,13 +8,13 @@
 import SwiftUI
 
 struct CombinedReportView: View {
-    let metrics: AggregatedMetrics
+    let metrics: SiteMetrics
     
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             // Section Header
             VStack(spacing: 2) {
-                Text("COMBINED ENERGY REPORT")
+                Text("SITE ENERGY REPORT")
                     .font(.system(size: 16, weight: .bold, design: .monospaced))
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -30,7 +30,7 @@ struct CombinedReportView: View {
             VStack(spacing: 4) {
                 NetFlowRow(
                     label: "Net Flow:",
-                    value: metrics.netImportToday
+                    value: metrics.netFlowToday
                 )
                 
                 MetricRow(
@@ -172,13 +172,13 @@ struct NetFlowRow: View {
 
 #Preview {
     CombinedReportView(
-        metrics: AggregatedMetrics(
+        metrics: SiteMetrics(
             timestamp: Date(),
             productionToday: 33.4,
             consumptionToday: 48.6,
             gridImportToday: 30.6,
             gridExportToday: 11.4,
-            netImportToday: 19.2,
+            netFlowToday: 19.2,
             systems: []
         )
     )

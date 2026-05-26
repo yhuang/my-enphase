@@ -10,6 +10,9 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var configManager: ConfigManager
     @Environment(\.dismiss) var dismiss
+    #if DEBUG
+    var currentMetrics: SiteMetrics? = nil
+    #endif
     
     @State private var apiKey = ""
     @State private var clientID = ""
@@ -84,17 +87,38 @@ struct SettingsView: View {
                 
                 Section {
                     Button("Clear Cache") {
-                        // Note: This is handled at DataAggregator level now
+                        // Note: This is handled at SiteDataService level now
                         // Individual API cache is only used as fallback
                         APICache.shared.clearCache()
                     }
-                    
+
                     Button("Clear All Data", role: .destructive) {
                         configManager.clearConfig()
                         APICache.shared.clearCache()
                         loadCurrentConfig()
                     }
                 }
+
+                #if DEBUG
+                Section(header: Text("Developer")) {
+                    Button("Export Test Fixtures") {
+                        guard let metrics = currentMetrics else { return }
+                        FixtureRecorder.record(config: configManager.config, metrics: metrics)
+                    }
+                    .disabled(currentMetrics == nil)
+                    .foregroundColor(currentMetrics == nil ? .secondary : .blue)
+
+                    if let metrics = currentMetrics {
+                        Text("Will record \(metrics.systems.count) system(s) for \(String(ISO8601DateFormatter().string(from: metrics.timestamp).prefix(10)))")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text("Load data first, then export fixtures")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                #endif
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)

@@ -1,26 +1,27 @@
 //
-//  DataAggregator.swift
+//  SiteDataService.swift
 //  Enphase Monitor App
 //
-//  Aggregates energy metrics from multiple Enphase systems
+//  Fetches today's Interval Data for each System at the Site, aggregates per-System
+//  totals into SiteMetrics, and manages the Cache and API Budget cooldown.
 //
 
 import Foundation
 import Combine
 
-class DataAggregator: ObservableObject {
+class SiteDataService: ObservableObject {
     private let apiClient = EnphaseAPIClient()
     
     @Published var isLoading = false
     @Published var error: Error?
-    @Published var metrics: AggregatedMetrics?
+    @Published var metrics: SiteMetrics?
     @Published var lastUpdated: Date?
     @Published var isFromCache: Bool = false
 
     private let cacheTTL: TimeInterval = 60 // 60 seconds
     private let cacheFileURL: URL
     private var currentFetchTask: Task<Void, Never>?
-    private var inMemoryCache: (metrics: AggregatedMetrics, timestamp: Date)?
+    private var inMemoryCache: (metrics: SiteMetrics, timestamp: Date)?
     private let saveQueue = DispatchQueue(label: "com.enphase.reportcache", qos: .utility)
 
     private var lastAPICallTime: Date? {
@@ -35,7 +36,7 @@ class DataAggregator: ObservableObject {
     }
     
     /// Load cached report — in-memory first, disk fallback for cold starts
-    private func loadCachedReport() async -> (metrics: AggregatedMetrics, timestamp: Date)? {
+    private func loadCachedReport() async -> (metrics: SiteMetrics, timestamp: Date)? {
         if let cached = inMemoryCache {
             return cached
         }
@@ -64,7 +65,7 @@ class DataAggregator: ObservableObject {
     }
     
     /// Save report to disk (thread-safe with serialization)
-    private func saveCachedReport(_ metrics: AggregatedMetrics) {
+    private func saveCachedReport(_ metrics: SiteMetrics) {
         // Encode on the calling thread (likely main actor) to avoid concurrency issues
         let cached = CachedReport(metrics: metrics, timestamp: Date())
         inMemoryCache = (cached.metrics, cached.timestamp) // available immediately, before disk write completes
@@ -95,7 +96,7 @@ class DataAggregator: ObservableObject {
     }
     
     private struct CachedReport: Codable, @unchecked Sendable {
-        let metrics: AggregatedMetrics
+        let metrics: SiteMetrics
         let timestamp: Date
     }
 
@@ -225,7 +226,7 @@ class DataAggregator: ObservableObject {
             
             var systemMetrics: [SystemMetrics] = []
             
-            // Fetch data for each system
+            // Fetch Interval Data for each System and compute per-System totals
             for system in config.systems {
                 DebugLogger.log("📍 Fetching data for system: \(system.name) (\(system.id))")
                 
@@ -298,8 +299,8 @@ class DataAggregator: ObservableObject {
                 // Get latest battery SOC (state of charge percentage) from last interval
                 let batterySOC = Int(battery.intervals.last?.soc?.percent ?? 0)
                 
-                let netImported = gridImport - gridExport
-                
+                let netFlow = gridImport - gridExport
+
                 let metric = SystemMetrics(
                     id: system.id,
                     name: system.name,
@@ -310,26 +311,26 @@ class DataAggregator: ObservableObject {
                     gridExportToday: gridExport,
                     batteryChargedToday: batteryCharged,
                     batteryDischargedToday: batteryDischarged,
-                    netImportedToday: netImported
+                    netFlowToday: netFlow
                 )
                 
                 systemMetrics.append(metric)
             }
             
-            // Aggregate totals
+            // Aggregate per-System totals into a single SiteMetrics
             let totalProduction = systemMetrics.reduce(0) { $0 + $1.productionToday }
             let totalConsumption = systemMetrics.reduce(0) { $0 + $1.consumptionToday }
             let totalGridImport = systemMetrics.reduce(0) { $0 + $1.gridImportToday }
             let totalGridExport = systemMetrics.reduce(0) { $0 + $1.gridExportToday }
-            let totalNetImport = totalGridImport - totalGridExport
-            
-            let aggregated = AggregatedMetrics(
+            let totalNetFlow = totalGridImport - totalGridExport
+
+            let aggregated = SiteMetrics(
                 timestamp: now,
                 productionToday: totalProduction,
                 consumptionToday: totalConsumption,
                 gridImportToday: totalGridImport,
                 gridExportToday: totalGridExport,
-                netImportToday: totalNetImport,
+                netFlowToday: totalNetFlow,
                 systems: systemMetrics
             )
             

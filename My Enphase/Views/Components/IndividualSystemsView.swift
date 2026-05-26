@@ -9,30 +9,28 @@ import SwiftUI
 
 struct IndividualSystemsView: View {
     let systems: [SystemMetrics]
-    let queryType: QueryType
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             // Section Header
             VStack(spacing: 2) {
-                Text("INDIVIDUAL SYSTEMS REPORT")
+                Text("SYSTEMS REPORT")
                     .font(.system(size: 16, weight: .bold, design: .monospaced))
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                
+
                 Text(String(repeating: "-", count: 37))
                     .font(.system(size: 16, design: .monospaced))
                     .foregroundColor(.gray)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.horizontal)
-            
+
             // Systems
             ForEach(Array(systems.enumerated()), id: \.element.id) { index, system in
                 SystemCardView(
                     index: index + 1,
-                    system: system,
-                    showBatterySOC: queryType == .day
+                    system: system
                 )
                 .padding(.vertical, 1)
             }
@@ -49,7 +47,6 @@ struct IndividualSystemsView: View {
 struct SystemCardView: View {
     let index: Int
     let system: SystemMetrics
-    let showBatterySOC: Bool
     
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -72,7 +69,7 @@ struct SystemCardView: View {
             VStack(spacing: 3) {
                 SystemNetFlowRow(
                     label: "Net Flow",
-                    value: system.netImportedToday
+                    value: system.netFlowToday
                 )
 
                 SystemMetricRow(
@@ -126,9 +123,7 @@ struct SystemCardView: View {
                     iconVerticalScale: 1.50
                 )
                 
-                // Battery SOC (only for day queries)
-                if showBatterySOC {
-                    HStack(spacing: 0) {
+                HStack(spacing: 0) {
                         Image(systemName: "battery.100percent")
                             .resizable()
                             .scaledToFit()
@@ -147,7 +142,6 @@ struct SystemCardView: View {
                             .foregroundColor(AppColors.battery)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                }
             }
             .padding(.leading, 29)
         }
@@ -253,7 +247,7 @@ struct SystemNetFlowRow: View {
                 gridExportToday: 3.8,
                 batteryChargedToday: 8.5,
                 batteryDischargedToday: 6.8,
-                netImportedToday: 19.3
+                netFlowToday: 19.3
             ),
             SystemMetrics(
                 id: "5392556",
@@ -265,9 +259,8 @@ struct SystemNetFlowRow: View {
                 gridExportToday: 7.6,
                 batteryChargedToday: 8.1,
                 batteryDischargedToday: 5.4,
-                netImportedToday: -0.1
+                netFlowToday: -0.1
             )
         ],
-        queryType: .day
     )
 }

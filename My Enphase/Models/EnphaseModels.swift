@@ -7,13 +7,6 @@
 
 import Foundation
 
-// MARK: - Query Types
-enum QueryType: String, Codable {
-    case day
-    case month
-    case year
-}
-
 // MARK: - System Metrics
 struct SystemMetrics: Identifiable, Codable, @unchecked Sendable {
     let id: String
@@ -25,8 +18,8 @@ struct SystemMetrics: Identifiable, Codable, @unchecked Sendable {
     let gridExportToday: Double
     let batteryChargedToday: Double
     let batteryDischargedToday: Double
-    let netImportedToday: Double
-    
+    let netFlowToday: Double
+
     enum CodingKeys: String, CodingKey {
         case id
         case name
@@ -37,27 +30,27 @@ struct SystemMetrics: Identifiable, Codable, @unchecked Sendable {
         case gridExportToday = "grid_export_today"
         case batteryChargedToday = "battery_charged_today"
         case batteryDischargedToday = "battery_discharged_today"
-        case netImportedToday = "net_imported_today"
+        case netFlowToday = "net_flow_today"
     }
 }
 
 // MARK: - Aggregated Metrics
-struct AggregatedMetrics: Codable, @unchecked Sendable {
+struct SiteMetrics: Codable, @unchecked Sendable {
     let timestamp: Date
     let productionToday: Double
     let consumptionToday: Double
     let gridImportToday: Double
     let gridExportToday: Double
-    let netImportToday: Double
+    let netFlowToday: Double
     let systems: [SystemMetrics]
-    
+
     enum CodingKeys: String, CodingKey {
         case timestamp
         case productionToday = "production_today"
         case consumptionToday = "consumption_today"
         case gridImportToday = "grid_import_today"
         case gridExportToday = "grid_export_today"
-        case netImportToday = "net_import_today"
+        case netFlowToday = "net_flow_today"
         case systems
     }
 }

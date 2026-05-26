@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
 #
-# deploy_sidestore.sh
+# build.sh
 # Builds the "My Enphase" iOS app into an .ipa and delivers it to an
 # iCloud Drive folder so it appears in the Files app on the iPhone,
 # ready to import into SideStore.
 #
-# Usage:  bash deploy_sidestore.sh
+# Usage:
+#   bash build.sh              # build and deliver the .ipa
+#   bash build.sh --team-id   # print your Apple Team ID and exit
+#
+# SETUP:
+#   Copy .env.example to .env and fill in your values before running.
 #
 # WHAT THIS SCRIPT DOES NOT DO:
 #   It cannot open SideStore on the phone or tap "import" for you.
@@ -15,58 +20,33 @@
 #
 set -euo pipefail
 
-# ======================================================================
-# REQUIRED INPUT PARAMETERS  --  YOU MUST EDIT ALL THREE BEFORE RUNNING
-# ======================================================================
+# ── --team-id helper ─────────────────────────────────────────────────────────
+if [ "${1:-}" = "--team-id" ]; then
+  echo "Apple Developer Team IDs found on this Mac:"
+  security find-identity -v -p codesigning 2>/dev/null \
+    | grep -oE '"[^"]+"' \
+    | sort -u \
+    | while IFS= read -r cert; do
+        tid=$(echo "$cert" | grep -oE '[A-Z0-9]{10}' | tail -1)
+        [ -n "$tid" ] && echo "  $tid  $cert"
+      done
+  echo ""
+  echo "Paste the 10-character ID into DEVELOPMENT_TEAM in your .env"
+  exit 0
+fi
 
-# [1] PROJECT_DIR
-#     Absolute path to the folder that CONTAINS "My Enphase.xcodeproj"
-#     on your Mac. This is your Xcode project on disk, NOT the iCloud
-#     folder. Find it: in Xcode, right-click the project in the
-#     navigator -> "Show in Finder", then copy that folder's path.
-#     Example: "$HOME/Developer/My Enphase"
-PROJECT_DIR="/Users/yhuang/workspace/my-enphase"
+# Source deployment config (never committed — see .env.example)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+[ -f "$SCRIPT_DIR/.env" ] && { set -a; source "$SCRIPT_DIR/.env"; set +a; }
 
-# [2] BUNDLE_ID
-#     The app's bundle identifier. Find it in Xcode: select the
-#     "My Enphase" target -> General tab -> Identity -> Bundle Identifier.
-#     Example: "com.jimmyhuang.MyEnphase"
-#     (Used only for a sanity check + log output; must be one your free
-#      Apple ID can sign.)
-BUNDLE_ID="Duragility.Enphase-Monitor-App"
-
-# [3] ICLOUD_FOLDER_NAME
-#     The name of the folder you created inside iCloud Drive where the
-#     .ipa should be delivered. You said you made one called
-#     "My Enphase".  Just the folder name here, not a full path.
-ICLOUD_FOLDER_NAME="My Enphase"
-
-# ----------------------------------------------------------------------
-# OPTIONAL PARAMETERS  --  leave as-is unless a build error tells you to
-# ----------------------------------------------------------------------
-
-# PROJECT_NAME: basename of the .xcodeproj and the scheme name.
-# Change only if your .xcodeproj file or scheme is not "My Enphase".
-PROJECT_NAME="My Enphase"
-
-# DEVELOPMENT_TEAM: your 10-character Apple Team ID. Leave EMPTY first.
-# Only fill this in if the build fails with a code-signing /
-# provisioning error. Find it: Xcode -> Settings -> Accounts ->
-# select your Apple ID -> the Team ID is shown next to your team.
-DEVELOPMENT_TEAM=""
-
-# ======================================================================
-# END OF CONFIGURATION  --  no need to edit below this line
-# ======================================================================
-
-# ---- Validate that required parameters were filled in ----
 fail() { echo "ERROR: $1" >&2; exit 1; }
 
-[ -n "$PROJECT_DIR" ]        || fail "PROJECT_DIR is empty. Set parameter [1]."
-[ -n "$BUNDLE_ID" ]          || fail "BUNDLE_ID is empty. Set parameter [2]."
-[ -n "$ICLOUD_FOLDER_NAME" ] || fail "ICLOUD_FOLDER_NAME is empty. Set parameter [3]."
-[ -d "$PROJECT_DIR" ]        || fail "PROJECT_DIR does not exist: $PROJECT_DIR"
+[ -n "${PROJECT_DIR:-}"        ] || fail "PROJECT_DIR not set — copy .env.example to .env and fill it in"
+[ -n "${BUNDLE_ID:-}"          ] || fail "BUNDLE_ID not set — copy .env.example to .env and fill it in"
+[ -n "${ICLOUD_FOLDER_NAME:-}" ] || fail "ICLOUD_FOLDER_NAME not set — copy .env.example to .env and fill it in"
+[ -d "$PROJECT_DIR"            ] || fail "PROJECT_DIR does not exist: $PROJECT_DIR"
 
+PROJECT_NAME="${PROJECT_NAME:-My Enphase}"
 PROJECT="$PROJECT_DIR/$PROJECT_NAME.xcodeproj"
 [ -d "$PROJECT" ] || fail "Cannot find $PROJECT_NAME.xcodeproj in $PROJECT_DIR"
 
@@ -88,12 +68,16 @@ mkdir -p "$BUILD_DIR" "$ICLOUD_DIR"
 
 # ---- Build for a real device (Release, iphoneos SDK) ----
 echo "==> Building (this can take a minute)"
+EXTRA_SIGNING=()
+[ -n "${DEVELOPMENT_TEAM:-}" ] && EXTRA_SIGNING=("DEVELOPMENT_TEAM=$DEVELOPMENT_TEAM")
+
 xcodebuild -project "$PROJECT" -scheme "$PROJECT_NAME" \
   -configuration Release -sdk iphoneos \
   -derivedDataPath "$BUILD_DIR/DerivedData" \
   CODE_SIGNING_ALLOWED=NO \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGN_IDENTITY="" \
+  "${EXTRA_SIGNING[@]}" \
   build
 
 # ---- Locate the built .app ----

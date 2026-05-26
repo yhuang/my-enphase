@@ -1,294 +1,212 @@
-# My Enphase iOS App
+# My Enphase
 
-An iOS application for monitoring energy metrics from multiple Enphase solar systems via the Enphase Enlighten Cloud API v4. This app provides the same functionality as the Go terminal application but with a native iOS interface.
+An iOS app that shows today's energy metrics — production, consumption, battery, and grid flow — for one or more Enphase solar systems. Data comes directly from the Enphase Enlighten Cloud API v4.
 
-## Features
-
-- **Multi-System Monitoring**: View combined metrics from multiple Enphase systems
-- **Comprehensive Metrics**: Track production, consumption, battery usage, grid import/export
-- **Historical Queries**: Query data by day, month, or year
-- **OAuth 2.0 Authentication**: Secure API access with token management
-- **Native iOS Interface**: SwiftUI-based design optimized for iPhone and iPad
-- **Real-time Updates**: Fetch latest energy data with pull-to-refresh
-
-## Screenshots
-
-The app displays:
-- Combined energy report (total production, consumption, net flow)
-- Individual system details (per-system metrics and battery status)
-- Historical data querying (select date and query type)
-- Settings management (API credentials and system configuration)
+---
 
 ## Prerequisites
 
-- iOS 16.0 or later
-- Xcode 15.0 or later
-- **Enphase Developer Portal Account**: Register at https://developer-v4.enphase.com/
-- **OAuth Credentials**: API key, client ID, client secret from the Developer Portal
-- **System IDs**: Your Enphase system IDs from Enlighten
+| What | Where to get it |
+|---|---|
+| macOS + Xcode (latest) | Mac App Store |
+| Enphase Enlighten account | Your existing account at enlighten.enphaseenergy.com |
+| Enphase Developer account (free) | developer-v4.enphase.com |
 
-## Installation
+---
 
-1. **Open the project in Xcode:**
-   ```bash
-   open "Enphase Monitor App.xcodeproj"
+## Step 1 — Clone and create your `.env`
+
+```bash
+git clone <repo-url>
+cd my-enphase
+cp .env.example .env
+```
+
+Open `.env` in any text editor. Fill in `PROJECT_DIR` with the full path to this folder (e.g. `/Users/yourname/code/my-enphase`) and `BUNDLE_ID` with your app's bundle identifier (you can change this to anything like `com.yourname.MyEnphase` — just keep it consistent with what you set in Xcode).
+
+You'll fill in the remaining fields in the steps below.
+
+---
+
+## Step 2 — Get Enphase API credentials
+
+1. Sign up at **developer-v4.enphase.com** (free — the "Watt" plan is sufficient)
+2. Create a new application. For the redirect URI, use:
    ```
+   https://api.enphaseenergy.com/oauth/redirect_uri
+   ```
+3. After creating the app, copy these three values into your `.env`:
+   - `ENPHASE_API_KEY` — the API key shown on your app's detail page
+   - `ENPHASE_CLIENT_ID` — also called "App ID" or "Client ID"
+   - `ENPHASE_CLIENT_SECRET` — also called "App Secret"
 
-2. **Select your development team** in the project settings (Signing & Capabilities)
+---
 
-3. **Build and run** the app on your device or simulator
+## Step 3 — Get your OAuth refresh token
 
-## Configuration
+The app uses a refresh token to request fresh access tokens automatically. You only need to do this once; the refresh token does not expire unless you revoke it.
 
-### First-Time Setup
+### 3a. Open the authorization URL in a browser
 
-1. **Launch the app** - you'll see a welcome screen
-2. **Tap "Open Settings"** to configure the app
-3. **Enter API credentials:**
-   - API Key from Enphase Developer Portal
-   - Client ID (OAuth)
-   - Client Secret (OAuth)
-   - Refresh Token (from OAuth flow)
+Replace `YOUR_CLIENT_ID` in this URL and paste it into your browser:
 
-4. **Add your systems:**
-   - Tap "Add System"
-   - Enter System ID (from Enlighten URL)
-   - Enter a friendly name
-   - Repeat for each system
+```
+https://api.enphaseenergy.com/oauth/authorize?response_type=code&client_id=YOUR_CLIENT_ID&redirect_uri=https://api.enphaseenergy.com/oauth/redirect_uri
+```
 
-5. **Save Configuration**
+Sign in with your **Enlighten** credentials when prompted, then click **Allow**.
 
-### Finding Your System IDs
+### 3b. Copy the authorization code
 
-1. Log into https://enlighten.enphaseenergy.com
+After you click Allow, your browser redirects to a page that shows a short code. Copy everything after `?code=` in the URL. It looks like `XXXXXXXXXXXXXXXX`.
+
+### 3c. Exchange the code for a refresh token
+
+Run this curl command, substituting your values:
+
+```bash
+curl -s -X POST "https://api.enphaseenergy.com/oauth/token" \
+  -H "Authorization: Basic $(printf 'YOUR_CLIENT_ID:YOUR_CLIENT_SECRET' | base64)" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=authorization_code&redirect_uri=https://api.enphaseenergy.com/oauth/redirect_uri&code=YOUR_AUTH_CODE" \
+  | python3 -m json.tool
+```
+
+The response includes `"refresh_token": "..."`. Copy that value into:
+- `ENPHASE_REFRESH_TOKEN` in your `.env`
+- The **Refresh Token** field in the app's Settings screen (Step 6)
+
+> **Note:** The authorization code from Step 3b is single-use and expires in a few minutes. If the curl command fails, repeat from Step 3a.
+
+---
+
+## Step 4 — Find your system ID(s)
+
+1. Log into **enlighten.enphaseenergy.com**
 2. Select one of your systems
-3. Look at the URL: `https://enlighten.enphaseenergy.com/systems/SYSTEM_ID/overview`
-4. The number in the URL is your System ID
-
-## Usage
-
-### Viewing Current Data
-
-1. **Tap the refresh button** (↻) in the top-right to load today's data
-2. View the **Combined Energy Report** showing totals across all systems
-3. Scroll down to see **Individual System Reports** with detailed metrics
-
-### Querying Historical Data
-
-1. **Tap the calendar button** (📅) in the top-left
-2. Select query type: **Day**, **Month**, or **Year**
-3. Choose a date using the date picker
-4. Tap **Apply** to load historical data
-
-### Understanding Metrics
-
-**Combined Energy Report:**
-- **Produced**: Total solar generation (kWh)
-- **Consumed**: Total household consumption (kWh)
-# My Enphase (iOS)
-
-An iOS app to monitor energy metrics from one or more Enphase systems using the Enphase Enlighten Cloud API v4. Features a clean, icon-enhanced interface with pull-to-refresh support and intelligent caching.
-
-## Highlights
-
-- **Multi-system monitoring** with combined and per-system reports
-- **Pull-to-refresh** with intelligent 60-second cache to minimize API calls
-- **Icon-enhanced UI** with SF Symbols for battery, solar, and grid status
-- **OAuth 2.0 token refresh** (refresh token required)
-- **SwiftUI-based** responsive design (iPhone / iPad)
-- **Monospaced typography** at 16pt with clear visual hierarchy
-
-## Prerequisites
-
-- macOS with Xcode 15 (or latest compatible Xcode)
-- iOS 16 or later to run the app on device/simulator
-- Enphase Developer Portal account: https://developer-v4.enphase.com/
-- OAuth credentials (API key, client ID, client secret) and a refresh token
-
-## Open & Run
-
-1. Open the Xcode project:
-   ```bash
-   open "My Enphase.xcodeproj"
-   ```
-
-2. Choose your development team under Signing & Capabilities
-3. Build and run on a simulator or device
-
-## Configuration (In-App)
-
-1. Launch the app and tap the **gear icon** (⚙️) to open Settings
-2. Enter API credentials:
-   - API Key
-   - Client ID
-   - Client Secret
-   - Refresh Token (required for in-app requests)
-3. Add one or more systems via `Add System` (enter System ID and friendly name)
-4. Save configuration
-
-**Note**: The app currently expects a pre-obtained refresh token. An in-app OAuth authorization flow is planned.
-
-### Finding Your System ID
-
-1. Log into https://enlighten.enphaseenergy.com
-2. Select a system and inspect the URL:
+3. Look at the browser URL:
    ```
    https://enlighten.enphaseenergy.com/systems/SYSTEM_ID/overview
    ```
-3. The numeric `SYSTEM_ID` is what you enter in the app
+4. The number in the URL is your System ID. Repeat for each system you want to monitor.
 
-## UI Overview
+---
 
-### Navigation Bar
-- **Title**: "ENPHASE MULTI-SYSTEM MONITOR" (19pt, orange, monospaced)
-- **Settings**: Gear icon (⚙️) in top-right corner
+## Step 5 — Open in Xcode and run
 
-### Report Stats (Header)
-- **Updated**: Timestamp showing last data refresh
-- **Orange separators** frame the stats section
+```bash
+open "My Enphase.xcodeproj"
+```
 
-### Combined Energy Report
-- **Produced**: Total solar generation with sun icon (sun.max.fill)
-- **Consumed**: Total household consumption
-- **Net Flow**: Grid import/export with directional arrows
-  - magenta-colored down arrow for import (buying from grid)
-  - cyan-colored up arrow for export (selling to grid)
+In Xcode:
 
-### Individual Systems Report
-For each system:
-- **Grid Import**: Energy purchased from utility for this system (kWh)
-- **Grid Export**: Energy sold back to utility from this system (kWh)
-- **Produced**: Solar generation for this system (kWh)
-- **Net Energy Flow**: Net import/export for this system (kWh) with (import) or (export) suffix
-- **Battery Charged**: Energy stored in batteries for this system (kWh)
-- **Battery Discharged**: Energy used from batteries for this system (kWh)
-- **Battery Percentage**: Current state of charge (SOC) of the battery system, displayed as a percentage (0-100%). This metric is shown per-system only and is not aggregated across multiple systems.
-- **Total Consumed**: Total consumption for this system (kWh)
+1. Select the **My Enphase** target in the project navigator
+2. Go to **Signing & Capabilities** and choose your development team (your Apple ID works — no paid account required for the simulator)
+3. Choose a simulator from the toolbar (iPhone 16 or later recommended)
+4. Press **Cmd+R** to build and run
 
-## Features
+---
 
-### Pull-to-Refresh
-- **Pull down** on any screen to refresh data
-- **Smart caching**: If data is < 60 seconds old, serves cached data immediately
-- **No unnecessary API calls**: Respects cache TTL to avoid rate limits
-- **Automatic retry**: Handles rate limit errors with intelligent backoff
+## Step 6 — Configure the app
 
-### Intelligent Caching
-- **60-second TTL**: Fresh data is reused to minimize API calls
-- **Persistent cache**: Survives app restarts
-- **Stale data fallback**: Shows cached data if API fails
-- **Per-endpoint caching**: Each API call is independently cached
+On first launch the dashboard will be empty. Tap the **gear icon (⚙)** to open Settings.
 
-### Visual Design
-- **Monospaced fonts**: 16pt for content, 19pt for title
-- **Icon integration**: SF Symbols sized at 15pt for perfect alignment
-- **16pt left padding**: Content slightly indented for visual breathing room
-
-## Project Structure
-
-### Models
-- [My Enphase/Models/EnphaseModels.swift](My%20Enphase/Models/EnphaseModels.swift)
-  - `SystemMetrics`, `AggregatedMetrics`, `APIConfig`, `AppConfig`
-
-### Services
-- [My Enphase/Services/EnphaseAPIClient.swift](My%20Enphase/Services/EnphaseAPIClient.swift)
-  - API client with OAuth refresh, telemetry endpoints
-  - Rate-limit handling with automatic retry
-  - Per-endpoint response caching (60-second TTL)
-  
-- [My Enphase/Services/APICache.swift](My%20Enphase/Services/APICache.swift)
-  - Persistent cache with disk storage
-  - Automatic expiration and cleanup
-  
-- [My Enphase/Services/DataAggregator.swift](My%20Enphase/Services/DataAggregator.swift)
-  - Orchestrates multi-system requests
-  - Aggregates metrics with report-level caching
-  - Handles pull-to-refresh with cache awareness
-  
-- [My Enphase/Services/ConfigManager.swift](My%20Enphase/Services/ConfigManager.swift)
-  - Persists `AppConfig` to `UserDefaults`
-  - System add/remove helpers
-
-### Views
-- [My Enphase/Views/DashboardView.swift](My%20Enphase/Views/DashboardView.swift)
-  - Main UI coordinator with pull-to-refresh
-  - Navigation bar with title and settings
-  
-- [My Enphase/Views/SettingsView.swift](My%20Enphase/Views/SettingsView.swift)
-  - Configure API credentials and systems
-  
-- **Components**:
-  - `ReportStatsView` — Updated timestamp header
-  - `CombinedReportView` — Aggregated totals
-  - `IndividualSystemsView` — Per-system breakdown with icons
-
-## Implementation Notes
-
-### OAuth
-- `EnphaseAPIClient.refreshAccessToken(using:)` performs token refresh
-- Caches `access_token` until expiry
-- API key appended as URL parameter to each request
-
-### API Endpoints
-Production, consumption, battery, import/export telemetry endpoints are called individually for each system. Each refresh can produce 4-6 API calls per system.
-
-### Rate Limits
-- HTTP 429 mapped to `rateLimitExceeded` error
-- 60-second cache prevents excessive API calls
-- Manual refresh control prevents uncontrolled polling
-- Automatic retry with configurable wait time
-
-### Persistence
-- **Config**: `UserDefaults` key `enphase_app_config`
-- **API Cache**: Disk-persisted at `enphase_api_cache.json`
-- **Report Cache**: Disk-persisted at `enphase_report_cache.json`
-
-## Usage
-
-### Daily Monitoring
-1. **Launch app** — shows most recent data from cache if available
-2. **Pull down** to refresh if cache is stale (> 60 seconds)
-3. View combined totals and individual system breakdowns
-4. **Scroll down** to see "Updated:" timestamp at bottom
-
-### Managing Settings
-1. Tap **gear icon** (⚙️)
-2. Modify API credentials or systems
+1. **API credentials** — enter the API Key, Client ID, Client Secret, and Refresh Token from Steps 2–3
+2. **Systems** — tap **Add System**, enter the System ID from Step 4 and a friendly name (e.g. "Main House"). Repeat for each system.
 3. Tap **Save**
-4. App auto-refreshes if configured and no data loaded
+
+Back on the dashboard, tap the **refresh button (↻)** to load today's data.
+
+> **Watt plan rate limit:** The free Enphase plan allows 10 API requests per minute. With 2 systems × 5 metrics = 10 calls per refresh, one full refresh uses the entire minute's budget. The app tracks this with a 60-second cooldown and serves cached data instead of re-fetching when the budget is exhausted.
+
+---
+
+## Running the tests
+
+The test suite has two layers:
+
+- **CalculationTests** — pure unit tests, no setup required, always run
+- **SiteDataServiceTests** — integration tests that validate the full calculation pipeline against recorded API responses; they skip automatically until you provide fixture data
+
+### Get a simulator UDID
+
+```bash
+xcrun simctl list devices available | grep iPhone
+```
+
+Copy a UDID (the string in parentheses) and add it to your `.env`:
+
+```
+SIMULATOR_ID="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+```
+
+### Record fixtures (one-time)
+
+Fixtures are your personal API responses. They are gitignored — every developer generates their own.
+
+**Option A — from the app (recommended):**
+
+1. Run the app in Xcode on a simulator (**Cmd+R**)
+2. Wait for today's data to appear in the dashboard
+3. Open Settings → tap **Export Test Fixtures**
+4. Run the recorder:
+   ```bash
+   bash record-fixtures.sh
+   ```
+
+**Option B — directly from the API (no simulator needed):**
+
+Make sure `ENPHASE_API_KEY`, `ENPHASE_CLIENT_ID`, `ENPHASE_CLIENT_SECRET`, and `ENPHASE_REFRESH_TOKEN` are set in your `.env`, then:
+
+```bash
+bash record-fixtures.sh
+```
+
+The script fetches today's data and writes it to `My Enphase Tests/test-data/<today's date>/`.
+
+> **If you see HTTP 429:** The Enphase Watt plan has a daily request budget. If it is exhausted, wait until the next calendar day and try again, or use Option A (the simulator export does not consume API budget).
+
+### Run the tests
+
+```bash
+bash test.sh
+```
+
+---
+
+## Building an .ipa for SideStore (optional)
+
+If you want to sideload the app onto a real iPhone without a paid Apple Developer account, use **SideStore** with an `.ipa` built from this script.
+
+1. Find your Apple Team ID:
+   ```bash
+   bash build.sh --team-id
+   ```
+2. Copy the 10-character ID into `DEVELOPMENT_TEAM` in your `.env`
+3. Build and deliver to iCloud Drive:
+   ```bash
+   bash build.sh
+   ```
+4. On your iPhone: open **SideStore** → **+** → **iCloud Drive** → find `My Enphase.ipa` → tap to install
+
+---
 
 ## Troubleshooting
 
-### "Authentication Required"
-- Verify `API Key`, `Client ID`, `Client Secret`, and `Refresh Token` in Settings
-- Ensure credentials match (from same Enphase app in Developer Portal)
+**"Authentication required" or blank dashboard**
+Verify all four credential fields in Settings (API Key, Client ID, Client Secret, Refresh Token). Make sure the Client ID and Client Secret match the same developer app you used to generate the refresh token.
 
-### "Rate Limit Exceeded"
-- Wait 60 seconds before retrying
-- Cache reduces frequency of API calls
-- Consider spacing out refreshes when monitoring multiple systems
+**HTTP 429 / "Usage limit exceeded for plan Watt"**
+You've hit the API budget for this minute or day. The app will serve cached data. Wait 60 seconds for the per-minute limit, or until midnight (Pacific time) for the daily limit.
 
-### "Network error: cancelled"
-- Caused by overlapping refresh requests
-- App now uses detached tasks to prevent cancellation
-- Pull-to-refresh checks if fetch is already in progress
+**Refresh token curl returns an error**
+The authorization code from Step 3b is single-use and expires in a few minutes. Go back to Step 3a and start fresh.
 
-### No Data
-- Ensure systems are reporting to Enlighten
-- Verify system IDs are correct (check Enlighten URLs)
-- Check API credentials are active in Developer Portal
+**`bash test.sh` fails with "SIMULATOR_ID not set"**
+Add `SIMULATOR_ID=...` to your `.env` (see the "Running the tests" section above).
 
-## Future Work
+**SiteDataServiceTests all show ⊘ (skipped)**
+No fixture data is present. Follow the "Record fixtures" steps above.
 
-- **In-app OAuth flow** (obtain refresh token inside app)
-- **Charts** for trend visualization
-- **Background refresh** with notifications
-- **Widgets** and Apple Watch support
-
-## Related Projects
-
-If you use a companion CLI tool to obtain OAuth refresh tokens, keep its instructions with that project. This repository does not include the OAuth CLI.
-
-## License
-
-Personal utility project — modify for your own use.
+**Build fails: "No account for team"**
+In Xcode → Signing & Capabilities, set the team to your personal Apple ID. A free account is enough for simulator and sideloading via SideStore.

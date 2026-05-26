@@ -8,6 +8,7 @@
 
 /* Begin PBXFileReference section */
 		5900AE532F354D760067DB68 /* My Enphase.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "My Enphase.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB0001000000000000000001 /* My Enphase Tests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "My Enphase Tests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -16,10 +17,22 @@
 			path = "My Enphase";
 			sourceTree = "<group>";
 		};
+		BB0002000000000000000002 /* My Enphase Tests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "My Enphase Tests";
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		5900AE502F354D760067DB68 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BB0003000000000000000003 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -33,6 +46,7 @@
 			isa = PBXGroup;
 			children = (
 				5900AE552F354D760067DB68 /* My Enphase */,
+				BB0002000000000000000002 /* My Enphase Tests */,
 				5900AE542F354D760067DB68 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,6 +55,7 @@
 			isa = PBXGroup;
 			children = (
 				5900AE532F354D760067DB68 /* My Enphase.app */,
+				BB0001000000000000000001 /* My Enphase Tests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -70,6 +85,29 @@
 			productReference = 5900AE532F354D760067DB68 /* My Enphase.app */;
 			productType = "com.apple.product-type.application";
 		};
+		BB0008000000000000000008 /* My Enphase Tests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BB000B00000000000000000B /* Build configuration list for PBXNativeTarget "My Enphase Tests" */;
+			buildPhases = (
+				BB0005000000000000000005 /* Sources */,
+				BB0003000000000000000003 /* Frameworks */,
+				BB0004000000000000000004 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				BB0007000000000000000007 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				BB0002000000000000000002 /* My Enphase Tests */,
+			);
+			name = "My Enphase Tests";
+			packageProductDependencies = (
+			);
+			productName = "My Enphase Tests";
+			productReference = BB0001000000000000000001 /* My Enphase Tests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -82,6 +120,10 @@
 				TargetAttributes = {
 					5900AE522F354D760067DB68 = {
 						CreatedOnToolsVersion = 26.2;
+					};
+					BB0008000000000000000008 = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = 5900AE522F354D760067DB68;
 					};
 				};
 			};
@@ -100,12 +142,20 @@
 			projectRoot = "";
 			targets = (
 				5900AE522F354D760067DB68 /* My Enphase */,
+				BB0008000000000000000008 /* My Enphase Tests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		5900AE512F354D760067DB68 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BB0004000000000000000004 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -122,7 +172,32 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		BB0005000000000000000005 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXContainerItemProxy section */
+		BB0006000000000000000006 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5900AE4B2F354D760067DB68 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5900AE522F354D760067DB68;
+			remoteInfo = "My Enphase";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXTargetDependency section */
+		BB0007000000000000000007 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5900AE522F354D760067DB68 /* My Enphase */;
+			targetProxy = BB0006000000000000000006 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		5900AE5C2F354D780067DB68 /* Debug */ = {
@@ -314,6 +389,49 @@
 			};
 			name = Release;
 		};
+		BB0009000000000000000009 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 7U7G8BFTN7;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "Duragility.Enphase-Monitor-App-Tests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/My Enphase.app/My Enphase";
+			};
+			name = Debug;
+		};
+		BB000A00000000000000000A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 7U7G8BFTN7;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "Duragility.Enphase-Monitor-App-Tests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/My Enphase.app/My Enphase";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -331,6 +449,15 @@
 			buildConfigurations = (
 				5900AE5F2F354D780067DB68 /* Debug */,
 				5900AE602F354D780067DB68 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BB000B00000000000000000B /* Build configuration list for PBXNativeTarget "My Enphase Tests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BB0009000000000000000009 /* Debug */,
+				BB000A00000000000000000A /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -10,7 +10,7 @@ import SwiftUI
 
 struct DashboardView: View {
     @StateObject private var configManager = ConfigManager()
-    @StateObject private var aggregator = DataAggregator()
+    @StateObject private var siteDataService = SiteDataService()
     
     @State private var showingSettings = false
     
@@ -18,7 +18,7 @@ struct DashboardView: View {
         NavigationView {
             VStack(spacing: 0) {
                 // Main content area
-                if let error = aggregator.error {
+                if let error = siteDataService.error {
                     Spacer()
                     VStack(spacing: 20) {
                         Image(systemName: "exclamationmark.triangle.fill")
@@ -38,17 +38,17 @@ struct DashboardView: View {
                         
                         Button("Retry") {
                             Task {
-                                await aggregator.fetchMetrics(config: configManager.config)
+                                await siteDataService.fetchMetrics(config: configManager.config)
                             }
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.orange)
                     }
                     Spacer()
-                } else if let metrics = aggregator.metrics {
+                } else if let metrics = siteDataService.metrics {
                     ScrollView {
                         VStack(spacing: 0) {
-                            ReportStatsView(timestamp: aggregator.lastUpdated ?? Date(), isFromCache: aggregator.isFromCache)
+                            ReportStatsView(timestamp: siteDataService.lastUpdated ?? Date(), isFromCache: siteDataService.isFromCache)
                             
                             CombinedReportView(metrics: metrics)
                             
@@ -56,12 +56,12 @@ struct DashboardView: View {
                                 .frame(height: 24)
                             
                             if metrics.systems.count > 1 {
-                                IndividualSystemsView(systems: metrics.systems, queryType: .day)
+                                IndividualSystemsView(systems: metrics.systems)
                             }
                         }
                     }
                     .refreshable {
-                        await aggregator.refreshMetrics(config: configManager.config)
+                        await siteDataService.refreshMetrics(config: configManager.config)
                     }
                     .background(Color.black)
                     .ignoresSafeArea(edges: .bottom)
@@ -93,7 +93,7 @@ struct DashboardView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    Text("ENPHASE MULTI-SYSTEM MONITOR")
+                    Text("ENPHASE SITE MONITOR")
                         .font(.system(size: 18, weight: .bold, design: .monospaced))
                         .foregroundColor(.orange)
                 }
@@ -111,20 +111,24 @@ struct DashboardView: View {
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .sheet(isPresented: $showingSettings) {
+                #if DEBUG
+                SettingsView(configManager: configManager, currentMetrics: siteDataService.metrics)
+                #else
                 SettingsView(configManager: configManager)
+                #endif
             }
             .onChange(of: showingSettings) { oldValue, newValue in
                 // When settings sheet is dismissed, fetch data if configured
-                if !newValue && configManager.isConfigured() && aggregator.metrics == nil {
+                if !newValue && configManager.isConfigured() && siteDataService.metrics == nil {
                     Task {
-                        await aggregator.fetchMetrics(config: configManager.config)
+                        await siteDataService.fetchMetrics(config: configManager.config)
                     }
                 }
             }
             .task {
                 // Auto-fetch data when view appears if configured
-                if configManager.isConfigured() && aggregator.metrics == nil && !aggregator.isLoading {
-                    await aggregator.fetchMetrics(config: configManager.config)
+                if configManager.isConfigured() && siteDataService.metrics == nil && !siteDataService.isLoading {
+                    await siteDataService.fetchMetrics(config: configManager.config)
                 }
             }
         }
