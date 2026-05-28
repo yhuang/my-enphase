@@ -151,7 +151,10 @@ final class SiteDataService: ObservableObject {
             let dataAge = Date().timeIntervalSince(cached.metrics.timestamp)
             DebugLogger.log("📦 Found cached data, age: \(String(format: "%.1f", dataAge))s (TTL: \(apiCooldownTTL)s)")
 
-            if dataAge < apiCooldownTTL {
+            // Fresh-cache short-circuit applies only to the automatic initial load.
+            // An explicit pull-to-refresh (cancelPrevious == true) always proceeds to
+            // the API as long as the budget cooldown allows it.
+            if !cancelPrevious && dataAge < apiCooldownTTL {
                 DebugLogger.log("📦 ✅ Cache is fresh — serving without API call")
                 metrics = cached.metrics
                 lastUpdated = cached.metrics.timestamp
