@@ -105,7 +105,7 @@ final class SiteDataService: ObservableObject {
     // 5 MB — shared threshold with Cache.swift's disk guard.
     private let reportCacheMaxBytes = 5_000_000
 
-    private struct CachedReport: Codable {
+    private struct CachedReport: Codable, Sendable {
         let metrics: SiteMetrics
         let timestamp: Date
     }
@@ -123,7 +123,7 @@ final class SiteDataService: ObservableObject {
         guard waitTime > 0 else { return }
         DebugLogger.log("⏳ No cached data available. Waiting \(String(format: "%.1f", waitTime))s for API Budget cooldown...")
         // Propagates CancellationError so the caller can exit cleanly.
-        try await Task.sleep(nanoseconds: UInt64(waitTime * 1_000_000_000))
+        try await Task.sleep(for: .seconds(waitTime))
     }
 
     // MARK: - Public fetch interface
@@ -310,7 +310,7 @@ final class SiteDataService: ObservableObject {
                     DebugLogger.log("⏳ API Budget exhausted — waiting \(waitSeconds)s before retry...")
                     lastAPICallTimestamp = Date().timeIntervalSinceReferenceDate
                     do {
-                        try await Task.sleep(nanoseconds: UInt64(waitSeconds) * 1_000_000_000)
+                        try? await Task.sleep(for: .seconds(waitSeconds))
                     } catch {
                         isLoading = false
                         return // task cancelled during wait

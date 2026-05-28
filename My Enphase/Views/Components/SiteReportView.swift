@@ -68,7 +68,8 @@ struct SiteReportView: View {
             .padding(.horizontal)
             .padding(.leading, 10)
         }
-        .padding(.vertical)
+        .padding(.top, 8)
+        .padding(.bottom, 16)
         .padding(.leading, 16)
         .frame(maxWidth: .infinity)
         .background(Color.black)

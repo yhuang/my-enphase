@@ -12,6 +12,7 @@ struct SettingsView: View {
     @ObservedObject var siteDataService: SiteDataService
     @Environment(\.dismiss) var dismiss
 
+
     @State private var apiKey = ""
     @State private var clientID = ""
     @State private var clientSecret = ""
@@ -165,6 +166,7 @@ struct AddSystemView: View {
 
     @State private var systemID = ""
     @State private var systemName = ""
+
 
     var body: some View {
         NavigationStack {

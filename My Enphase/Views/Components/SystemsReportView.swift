@@ -11,7 +11,7 @@ struct SystemsReportView: View {
     let systems: [SystemMetrics]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 4) {
             ReportSectionHeader(title: "SYSTEMS REPORT")
 
             ForEach(systems.indices, id: \.self) { i in
@@ -19,8 +19,7 @@ struct SystemsReportView: View {
                     .padding(.vertical, 1)
             }
         }
-        .padding(.top, 4)
-        .padding(.bottom)
+        .padding(.top, 2)
         .padding(.leading, 16)
         .frame(maxWidth: .infinity)
         .background(Color.black)
@@ -83,7 +82,7 @@ struct SystemCardView: View {
             .padding(.leading, 30)
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.black)
     }

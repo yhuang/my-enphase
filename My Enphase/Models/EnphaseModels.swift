@@ -8,7 +8,7 @@
 import Foundation
 
 // MARK: - System Metrics
-struct SystemMetrics: Identifiable, Codable {
+struct SystemMetrics: Identifiable, Codable, Sendable {
     let id: String
     let name: String
     let productionToday: Double
@@ -35,7 +35,7 @@ struct SystemMetrics: Identifiable, Codable {
 }
 
 // MARK: - Site Metrics
-struct SiteMetrics: Codable {
+struct SiteMetrics: Codable, Sendable {
     let timestamp: Date
     let productionToday: Double
     let consumptionToday: Double
