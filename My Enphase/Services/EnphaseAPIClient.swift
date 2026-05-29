@@ -56,9 +56,16 @@ struct BatteryEnergyReading: Codable {
 
 struct BatterySOC: Codable {
     let percent: Double
+    let devicesReporting: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case percent
+        case devicesReporting = "devices_reporting"
+    }
 }
 
 struct EnergyInterval: Codable {
+    let endAt: Int?
     let whDel: Double?
     let enwh: Double?
     let whImported: Double?
@@ -68,6 +75,7 @@ struct EnergyInterval: Codable {
     let discharge: BatteryEnergyReading?
 
     enum CodingKeys: String, CodingKey {
+        case endAt = "end_at"
         case whDel = "wh_del"
         case enwh
         case whImported = "wh_imported"

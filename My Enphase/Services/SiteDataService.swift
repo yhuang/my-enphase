@@ -247,7 +247,30 @@ final class SiteDataService: ObservableObject {
                     let consumptionTotal  = EnphaseAPIClient.calculateDailyTotal(from: consumption.intervals, field: \.enwh)
                     let batteryCharged    = EnphaseAPIClient.calculateBatteryCharged(from: battery.intervals)
                     let batteryDischarged = EnphaseAPIClient.calculateBatteryDischarged(from: battery.intervals)
-                    let batterySOC        = battery.intervals.last?.soc.map { Int($0.percent) }
+                    let socIntervals = battery.intervals.suffix(5)
+                    for (i, interval) in socIntervals.enumerated() {
+                        let idx = battery.intervals.count - socIntervals.count + i
+                        if let soc = interval.soc {
+                            DebugLogger.log("🔋 SOC[\(idx)]: percent=\(soc.percent) devicesReporting=\(soc.devicesReporting.map(String.init) ?? "nil") endAt=\(interval.endAt.map(String.init) ?? "nil")")
+                        } else {
+                            DebugLogger.log("🔋 SOC[\(idx)]: soc=nil endAt=\(interval.endAt.map(String.init) ?? "nil")")
+                        }
+                    }
+                    let now = Date()
+                    let batterySOC        = battery.intervals
+                        .reversed()
+                        .first(where: { interval in
+                            guard let soc = interval.soc else { return false }
+                            // Primary: explicit devices_reporting flag from the API.
+                            if let dr = soc.devicesReporting { return dr > 0 }
+                            // Fallback: skip intervals that haven't ended yet (in-progress).
+                            if let endAt = interval.endAt {
+                                return Date(timeIntervalSince1970: TimeInterval(endAt)) <= now
+                            }
+                            return true
+                        })
+                        .flatMap(\.soc)
+                        .map { Int($0.percent.rounded()) }
 
                     let netFlow: Double? = (gridImport != nil || gridExport != nil)
                         ? (gridImport ?? 0) - (gridExport ?? 0)
@@ -263,8 +286,8 @@ final class SiteDataService: ObservableObject {
                         batterySOC: batterySOC,
                         gridImportToday: gridImport,
                         gridExportToday: gridExport,
-                        batteryChargedToday: batteryCharged > 0 ? batteryCharged : nil,
-                        batteryDischargedToday: batteryDischarged > 0 ? batteryDischarged : nil,
+                        batteryChargedToday: batteryCharged,
+                        batteryDischargedToday: batteryDischarged,
                         netFlowToday: netFlow
                     ))
                 }
