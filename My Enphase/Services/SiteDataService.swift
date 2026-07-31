@@ -218,8 +218,17 @@ final class SiteDataService: ObservableObject {
                         systemID: system.id, startDate: startDate, endDate: now, config: config.api)
                     let consumption = try await apiClient.fetchConsumptionIntervalData(
                         systemID: system.id, startDate: startDate, endDate: now, config: config.api)
+                    // SOC is a point-in-time reading, not a daily total, so widen the
+                    // lookback beyond midnight — otherwise shortly after the day rolls
+                    // over there's no interval yet with a real reading, and the battery
+                    // reads as 0% until enough of today has elapsed.
+                    let socLookbackStart = calendar.date(byAdding: .hour, value: -24, to: now) ?? startDate
                     let battery = try await apiClient.fetchBatteryIntervalData(
-                        systemID: system.id, startDate: startDate, endDate: now, config: config.api)
+                        systemID: system.id, startDate: socLookbackStart, endDate: now, config: config.api)
+                    let todaysBatteryIntervals = battery.intervals.filter { interval in
+                        guard let endAt = interval.endAt else { return true }
+                        return Date(timeIntervalSince1970: TimeInterval(endAt)) >= startDate
+                    }
 
                     // Grid endpoints are optional — not all systems expose them.
                     var gridImport: Double? = nil
@@ -245,8 +254,8 @@ final class SiteDataService: ObservableObject {
 
                     let productionTotal   = EnphaseAPIClient.calculateDailyTotal(from: production.intervals, field: \.whDel)
                     let consumptionTotal  = EnphaseAPIClient.calculateDailyTotal(from: consumption.intervals, field: \.enwh)
-                    let batteryCharged    = EnphaseAPIClient.calculateBatteryCharged(from: battery.intervals)
-                    let batteryDischarged = EnphaseAPIClient.calculateBatteryDischarged(from: battery.intervals)
+                    let batteryCharged    = EnphaseAPIClient.calculateBatteryCharged(from: todaysBatteryIntervals)
+                    let batteryDischarged = EnphaseAPIClient.calculateBatteryDischarged(from: todaysBatteryIntervals)
                     let socIntervals = battery.intervals.suffix(5)
                     for (i, interval) in socIntervals.enumerated() {
                         let idx = battery.intervals.count - socIntervals.count + i
