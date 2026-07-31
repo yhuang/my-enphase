@@ -23,6 +23,11 @@ final class SiteDataService: ObservableObject {
     @Published var lastUpdated: Date?
     @Published var isFromCache = false
 
+    var onRefreshTokenRotated: ((String) -> Void)? {
+        get { apiClient.onRefreshTokenRotated }
+        set { apiClient.onRefreshTokenRotated = newValue }
+    }
+
     private let cacheFileURL: URL
     private var currentFetchTask: Task<Void, Never>?
     private var inMemoryCache: (metrics: SiteMetrics, timestamp: Date)?
@@ -257,7 +262,7 @@ final class SiteDataService: ObservableObject {
                         }
                     }
                     let now = Date()
-                    let batterySOC        = battery.intervals
+                    let preferredSOC = battery.intervals
                         .reversed()
                         .first(where: { interval in
                             guard let soc = interval.soc else { return false }
@@ -270,7 +275,11 @@ final class SiteDataService: ObservableObject {
                             return true
                         })
                         .flatMap(\.soc)
-                        .map { Int($0.percent.rounded()) }
+                    // soc is only present on a sparse subset of intervals (often just the
+                    // latest one), so if devices_reporting is 0 on that single reading there's
+                    // nothing else to prefer — fall back to it rather than showing nothing.
+                    let fallbackSOC = battery.intervals.reversed().compactMap(\.soc).first
+                    let batterySOC = (preferredSOC ?? fallbackSOC).map { Int($0.percent.rounded()) }
 
                     let netFlow: Double? = (gridImport != nil || gridExport != nil)
                         ? (gridImport ?? 0) - (gridExport ?? 0)
