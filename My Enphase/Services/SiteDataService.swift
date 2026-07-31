@@ -265,28 +265,17 @@ final class SiteDataService: ObservableObject {
                             DebugLogger.log("🔋 SOC[\(idx)]: soc=nil endAt=\(interval.endAt.map(String.init) ?? "nil")")
                         }
                     }
-                    let now = Date()
-                    let preferredSOC = battery.intervals
-                        .reversed()
-                        .first(where: { interval in
-                            guard let soc = interval.soc else { return false }
-                            // Primary: explicit devices_reporting flag from the API.
-                            if let dr = soc.devicesReporting { return dr > 0 }
-                            // Fallback: skip intervals that haven't ended yet (in-progress).
-                            if let endAt = interval.endAt {
-                                return Date(timeIntervalSince1970: TimeInterval(endAt)) <= now
-                            }
-                            return true
-                        })
-                        .flatMap(\.soc)
-                    // soc is only present on a sparse subset of intervals. The most recent
-                    // soc-bearing interval can be a stale in-progress placeholder reporting
-                    // percent: 0.0 with devices_reporting: 0 — prefer the most recent
-                    // *nonzero* reading over that placeholder before falling back to it.
+                    // The tail of the fetch window can carry a spurious percent: 0.0
+                    // reading — sometimes with devices_reporting: 0 (an in-progress
+                    // placeholder), but occasionally with devices_reporting > 0 too (a
+                    // bogus zero blip alongside otherwise-consistent nonzero readings).
+                    // Prefer the most recent trustworthy nonzero reading over either kind
+                    // of zero, and only accept a zero if that's truly all we have.
                     let socReadings = battery.intervals.reversed().compactMap(\.soc)
-                    let nonZeroSOC = socReadings.first(where: { $0.percent > 0 })
+                    let trustedNonZeroSOC = socReadings.first(where: { ($0.devicesReporting ?? 0) > 0 && $0.percent > 0 })
+                    let anyNonZeroSOC = socReadings.first(where: { $0.percent > 0 })
                     let fallbackSOC = socReadings.first
-                    let batterySOC = (preferredSOC ?? nonZeroSOC ?? fallbackSOC).map { Int($0.percent.rounded()) }
+                    let batterySOC = (trustedNonZeroSOC ?? anyNonZeroSOC ?? fallbackSOC).map { Int($0.percent.rounded()) }
 
                     let netFlow: Double? = (gridImport != nil || gridExport != nil)
                         ? (gridImport ?? 0) - (gridExport ?? 0)
